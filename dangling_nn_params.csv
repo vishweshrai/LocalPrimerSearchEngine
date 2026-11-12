@@ -1,0 +1,45 @@
+# Single-nucleotide dangling ends on a Watson-Crick pair, 1 M NaCl.,,,,,,,
+# Side: 3 means the unpaired base lies 3' of Paired on the same strand (review notation PairedX/Complement);,,,,,,,,
+#       5 means it lies 5' of Paired (notation XPaired/Complement).,,,,,,,,
+# dH and dS are the values distributed with Primer3, which carry the SantaLucia DNA set.,,,,,,,
+# Published_dH and Published_dG37 are Table 3 of SantaLucia & Hicks 2004, transcribed independently.,,,,,,,
+# NNParams asserts dH against Published_dH directly, and asserts the dS column through,,,,,,,
+#   dG37 = dH - 310.15*dS/1000  against Published_dG37, since Table 3 prints no dS column of its own,,,,,,,
+#   (its footnote states that dS is to be recovered from dH and dG37 exactly this way).,,,,,,,,
+# Tolerance on that reconstruction is 0.25 entropy units, which is the rounding bound of the three,,,,,,,
+#   printed precisions (0.1 kcal/mol on dH, 0.01 on dG37, 0.1 e.u. on dS) summing to 0.2273 e.u.,,,,,,
+# Primary measurement: Bommarito S, Peyret N, SantaLucia J Jr. Nucleic Acids Res 2000;28:1929-34. doi:10.1093/nar/28.9.1929,,,,,,
+# All 32 combinations were measured; none of this table is extrapolated.,,,,,,,,
+Side,Paired,Dangling,Complement,dH_kcal_per_mol,dS_cal_per_K_per_mol,Published_dH_kcal_per_mol,Published_dG37_kcal_per_mol,Source
+3,A,A,T,-0.5,-1.1,-0.5,-0.12,Bommarito2000
+3,A,C,T,4.7,14.2,4.7,0.28,Bommarito2000
+3,A,G,T,-4.1,-13.1,-4.1,-0.01,Bommarito2000
+3,A,T,T,-3.8,-12.6,-3.8,0.13,Bommarito2000
+3,C,A,G,-5.9,-16.5,-5.9,-0.82,Bommarito2000
+3,C,C,G,-2.6,-7.4,-2.6,-0.31,Bommarito2000
+3,C,G,G,-3.2,-10.4,-3.2,-0.01,Bommarito2000
+3,C,T,G,-5.2,-15,-5.2,-0.52,Bommarito2000
+3,G,A,C,-2.1,-3.9,-2.1,-0.92,Bommarito2000
+3,G,C,C,-0.2,-0.1,-0.2,-0.23,Bommarito2000
+3,G,G,C,-3.9,-11.2,-3.9,-0.44,Bommarito2000
+3,G,T,C,-4.4,-13.1,-4.4,-0.35,Bommarito2000
+3,T,A,A,-0.7,-0.8,-0.7,-0.48,Bommarito2000
+3,T,C,A,4.4,14.9,4.4,-0.19,Bommarito2000
+3,T,G,A,-1.6,-3.6,-1.6,-0.5,Bommarito2000
+3,T,T,A,2.9,10.4,2.9,-0.29,Bommarito2000
+5,A,A,T,0.2,2.3,0.2,-0.51,Bommarito2000
+5,A,C,T,0.6,3.3,0.6,-0.42,Bommarito2000
+5,A,G,T,-1.1,-1.6,-1.1,-0.62,Bommarito2000
+5,A,T,T,-6.9,-20,-6.9,-0.71,Bommarito2000
+5,C,A,G,-6.3,-17.1,-6.3,-0.96,Bommarito2000
+5,C,C,G,-4.4,-12.6,-4.4,-0.52,Bommarito2000
+5,C,G,G,-5.1,-14,-5.1,-0.72,Bommarito2000
+5,C,T,G,-4,-10.9,-4,-0.58,Bommarito2000
+5,G,A,C,-3.7,-10,-3.7,-0.58,Bommarito2000
+5,G,C,C,-4,-11.9,-4,-0.34,Bommarito2000
+5,G,G,C,-3.9,-10.9,-3.9,-0.56,Bommarito2000
+5,G,T,C,-4.9,-13.8,-4.9,-0.61,Bommarito2000
+5,T,A,A,-2.9,-7.6,-2.9,-0.5,Bommarito2000
+5,T,C,A,-4.1,-13,-4.1,-0.02,Bommarito2000
+5,T,G,A,-4.2,-15,-4.2,0.48,Bommarito2000
+5,T,T,A,-0.2,-0.5,-0.2,-0.1,Bommarito2000

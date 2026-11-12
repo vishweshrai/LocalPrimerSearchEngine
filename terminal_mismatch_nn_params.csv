@@ -1,0 +1,60 @@
+# Terminal mismatches: the unpaired pair that closes a hairpin or internal loop, 1 M NaCl.,,,,,,
+# Notation i1 i2 / j1 j2 is 5'-i1 i2-3' stacked over 3'-j1 j2-5'. i1.j1 is the Watson-Crick closing,,,,,,,
+# pair and i2.j2 the mismatch. Only the 48 rows with a Watson-Crick closing pair and a genuine,,,,,,,
+# mismatch are shipped; the remaining slots in the source file are sentinels or ordinary stacks.,,,,,,,
+# Required by Equations 9 and 10 of SantaLucia & Hicks 2004 for hairpin stability, and by,,,,,,
+# Equation 12 for internal loops. The full measured set is attributed there to S. Varma &,,,,,,,
+# J. SantaLucia, manuscript in preparation, so no primary paper reproduces it; the values below,,,,,
+# come from the Primer3 distribution. The review states the range runs from CG/GA to AC/TC and,,,,,,,
+# that terminal mismatches are stabilising, which both hold here and are asserted in NNParams.,,,,,,
+# Suspect=1 marks GG/CG, whose dH of -0.70 with dS of -19.2 gives dG37 = +5.26. That is,,,,,,
+# inconsistent with every neighbouring entry and lies outside the published range.,,,,,,,
+i1,i2,j1,j2,dH_kcal_per_mol,dS_cal_per_K_per_mol,Suspect,Source
+A,A,T,A,-3.1,-7.8,0,Primer3_SantaLucia
+A,A,T,C,-1.6,-4,0,Primer3_SantaLucia
+A,A,T,G,-1.9,-4.4,0,Primer3_SantaLucia
+A,C,T,A,-1.8,-3.8,0,Primer3_SantaLucia
+A,C,T,C,-0.1,-0.5,0,Primer3_SantaLucia
+A,C,T,T,-0.9,-1.7,0,Primer3_SantaLucia
+A,G,T,A,-2.5,-5.9,0,Primer3_SantaLucia
+A,G,T,G,-1.1,-2.1,0,Primer3_SantaLucia
+A,G,T,T,-3.2,-8.7,0,Primer3_SantaLucia
+A,T,T,C,-2.3,-6.3,0,Primer3_SantaLucia
+A,T,T,G,-3.5,-9.4,0,Primer3_SantaLucia
+A,T,T,T,-2.4,-6.5,0,Primer3_SantaLucia
+C,A,G,A,-4.3,-10.7,0,Primer3_SantaLucia
+C,A,G,C,-2.6,-5.9,0,Primer3_SantaLucia
+C,A,G,G,-3.9,-9.6,0,Primer3_SantaLucia
+C,C,G,A,-2.7,-6,0,Primer3_SantaLucia
+C,C,G,C,-2.1,-5.1,0,Primer3_SantaLucia
+C,C,G,T,-3.2,-8,0,Primer3_SantaLucia
+C,G,G,A,-6,-15.5,0,Primer3_SantaLucia
+C,G,G,G,-3.8,-9.5,0,Primer3_SantaLucia
+C,G,G,T,-3.8,-9,0,Primer3_SantaLucia
+C,T,G,C,-3.9,-10.6,0,Primer3_SantaLucia
+C,T,G,G,-6.6,-18.7,0,Primer3_SantaLucia
+C,T,G,T,-6.1,-16.9,0,Primer3_SantaLucia
+G,A,C,A,-8,-22.5,0,Primer3_SantaLucia
+G,A,C,C,-5,-13.8,0,Primer3_SantaLucia
+G,A,C,G,-4.3,-11.1,0,Primer3_SantaLucia
+G,C,C,A,-3.2,-7.1,0,Primer3_SantaLucia
+G,C,C,C,-3.9,-10.6,0,Primer3_SantaLucia
+G,C,C,T,-4.9,-13.5,0,Primer3_SantaLucia
+G,G,C,A,-4.6,-11.4,0,Primer3_SantaLucia
+G,G,C,G,-0.7,-19.2,1,Primer3_SantaLucia
+G,G,C,T,-5.7,-15.9,0,Primer3_SantaLucia
+G,T,C,C,-3,-7.8,0,Primer3_SantaLucia
+G,T,C,G,-5.9,-16.1,0,Primer3_SantaLucia
+G,T,C,T,-7.4,-21.2,0,Primer3_SantaLucia
+T,A,A,A,-2.5,-6.3,0,Primer3_SantaLucia
+T,A,A,C,-2.3,-5.9,0,Primer3_SantaLucia
+T,A,A,G,-2,-4.7,0,Primer3_SantaLucia
+T,C,A,A,-2.7,-7,0,Primer3_SantaLucia
+T,C,A,C,-0.7,-1.3,0,Primer3_SantaLucia
+T,C,A,T,-2.5,-6.3,0,Primer3_SantaLucia
+T,G,A,A,-2.4,-5.8,0,Primer3_SantaLucia
+T,G,A,G,-1.1,-2.7,0,Primer3_SantaLucia
+T,G,A,T,-3.9,-10.5,0,Primer3_SantaLucia
+T,T,A,C,-0.7,-1.2,0,Primer3_SantaLucia
+T,T,A,G,-3.6,-9.8,0,Primer3_SantaLucia
+T,T,A,T,-3.2,-8.9,0,Primer3_SantaLucia

@@ -1,0 +1,109 @@
+# Exceptionally stable short hairpin loops, 1 M NaCl.,,,
+# Key is the closing pair's TOP base, then every loop base 5' to 3', then the closing pair's,,
+# BOTTOM base. A triloop key is 5 characters and a tetraloop key 6.,,,,
+# These are the sequence-specific bonuses of Equations 8 and 9 of SantaLucia & Hicks 2004,,,,
+# whose values the review places in supplementary material rather than in the paper; the numbers,,,,
+# below come from the Primer3 distribution. They are ADDED to the loop-length term, not,,,
+# substituted for it.,,,,
+# Every triloop entry has the form G-N-A, the motif the review singles out as unusually stable.,,,
+# Tetraloops cover the GNRA and GNNB families plus other sequences with good measurements.,,,,
+# UNITS. dH is kcal/mol and dS is cal/(K mol), the same convention as every other table in,,,
+# this suite, and the consumer forms dG(T) = dH - (T + 273.15)*dS/1000. The Primer3 loop files,,,
+# store the entropy scaled by 1000; it is divided back out here, so every row must satisfy,,,
+# |dH - 310.15*dS/1000| <= 3 kcal/mol. NNParams asserts exactly that at load.,,,,
+# Omitting these is not a small correction: GGAAC alone is worth -2.0 kcal/mol, which moves a,,,
+# hairpin melting temperature by tens of degrees.,,,,
+Loop,Key,dH_kcal_per_mol,dS_cal_per_K_per_mol,Source
+tri,AGAAT,-1.5,0,Primer3_SantaLucia
+tri,AGCAT,-1.5,0,Primer3_SantaLucia
+tri,AGGAT,-1.5,0,Primer3_SantaLucia
+tri,AGTAT,-1.5,0,Primer3_SantaLucia
+tri,CGAAG,-2,0,Primer3_SantaLucia
+tri,CGCAG,-2,0,Primer3_SantaLucia
+tri,CGGAG,-2,0,Primer3_SantaLucia
+tri,CGTAG,-2,0,Primer3_SantaLucia
+tri,GGAAC,-2,0,Primer3_SantaLucia
+tri,GGCAC,-2,0,Primer3_SantaLucia
+tri,GGGAC,-2,0,Primer3_SantaLucia
+tri,GGTAC,-2,0,Primer3_SantaLucia
+tri,TGAAA,-1.5,0,Primer3_SantaLucia
+tri,TGCAA,-1.5,0,Primer3_SantaLucia
+tri,TGGAA,-1.5,0,Primer3_SantaLucia
+tri,TGTAA,-1.5,0,Primer3_SantaLucia
+tetra,AAAAAT,0.5,-0.65,Primer3_SantaLucia
+tetra,AAAACT,0.7,1.61,Primer3_SantaLucia
+tetra,AAACAT,1,1.61,Primer3_SantaLucia
+tetra,ACTTGT,0,4.19,Primer3_SantaLucia
+tetra,AGAAAT,-1.1,1.61,Primer3_SantaLucia
+tetra,AGAGAT,-1.1,1.61,Primer3_SantaLucia
+tetra,AGATAT,-1.5,1.61,Primer3_SantaLucia
+tetra,AGCAAT,-1.6,1.61,Primer3_SantaLucia
+tetra,AGCGAT,-1.1,1.61,Primer3_SantaLucia
+tetra,AGCTTT,0.2,1.61,Primer3_SantaLucia
+tetra,AGGAAT,-1.1,1.61,Primer3_SantaLucia
+tetra,AGGGAT,-1.1,1.61,Primer3_SantaLucia
+tetra,AGGGGT,0.5,0.64,Primer3_SantaLucia
+tetra,AGTAAT,-1.6,1.61,Primer3_SantaLucia
+tetra,AGTGAT,-1.1,1.61,Primer3_SantaLucia
+tetra,AGTTCT,0.8,1.61,Primer3_SantaLucia
+tetra,ATTCGT,-0.2,1.61,Primer3_SantaLucia
+tetra,ATTTGT,0,1.61,Primer3_SantaLucia
+tetra,ATTTTT,-0.5,1.61,Primer3_SantaLucia
+tetra,CAAAAG,0.5,-1.29,Primer3_SantaLucia
+tetra,CAAACG,0.7,0,Primer3_SantaLucia
+tetra,CAACAG,1,0,Primer3_SantaLucia
+tetra,CAACCG,0,0,Primer3_SantaLucia
+tetra,CCTTGG,0,2.57,Primer3_SantaLucia
+tetra,CGAAAG,-1.1,0,Primer3_SantaLucia
+tetra,CGAGAG,-1.1,0,Primer3_SantaLucia
+tetra,CGATAG,-1.5,0,Primer3_SantaLucia
+tetra,CGCAAG,-1.6,0,Primer3_SantaLucia
+tetra,CGCGAG,-1.1,0,Primer3_SantaLucia
+tetra,CGCTTG,0.2,0,Primer3_SantaLucia
+tetra,CGGAAG,-1.1,0,Primer3_SantaLucia
+tetra,CGGGAG,-1,0,Primer3_SantaLucia
+tetra,CGGGGG,0.5,-0.97,Primer3_SantaLucia
+tetra,CGTAAG,-1.6,0,Primer3_SantaLucia
+tetra,CGTGAG,-1.1,0,Primer3_SantaLucia
+tetra,CGTTCG,0.8,0,Primer3_SantaLucia
+tetra,CTTCGG,-0.2,0,Primer3_SantaLucia
+tetra,CTTTGG,0,0,Primer3_SantaLucia
+tetra,CTTTTG,-0.5,0,Primer3_SantaLucia
+tetra,GAAAAC,0.5,-3.23,Primer3_SantaLucia
+tetra,GAAACC,0.7,0,Primer3_SantaLucia
+tetra,GAACAC,1,0,Primer3_SantaLucia
+tetra,GCTTGC,0,2.57,Primer3_SantaLucia
+tetra,GGAAAC,-1.1,0,Primer3_SantaLucia
+tetra,GGAGAC,-1.1,0,Primer3_SantaLucia
+tetra,GGATAC,-1.6,0,Primer3_SantaLucia
+tetra,GGCAAC,-1.6,0,Primer3_SantaLucia
+tetra,GGCGAC,-1.1,0,Primer3_SantaLucia
+tetra,GGCTTC,0.2,0,Primer3_SantaLucia
+tetra,GGGAAC,-1.1,0,Primer3_SantaLucia
+tetra,GGGGAC,-1.1,0,Primer3_SantaLucia
+tetra,GGGGGC,0.5,-0.97,Primer3_SantaLucia
+tetra,GGTAAC,-1.6,0,Primer3_SantaLucia
+tetra,GGTGAC,-1.1,0,Primer3_SantaLucia
+tetra,GGTTCC,0.8,0,Primer3_SantaLucia
+tetra,GTTCGC,-0.2,0,Primer3_SantaLucia
+tetra,GTTTGC,0,0,Primer3_SantaLucia
+tetra,GTTTTC,-0.5,0,Primer3_SantaLucia
+tetra,TAAAAA,0.5,0.32,Primer3_SantaLucia
+tetra,TAAACA,0.7,1.61,Primer3_SantaLucia
+tetra,TAACAA,1,1.61,Primer3_SantaLucia
+tetra,TCTTGA,0,4.19,Primer3_SantaLucia
+tetra,TGAAAA,-1.1,1.61,Primer3_SantaLucia
+tetra,TGAGAA,-1.1,1.61,Primer3_SantaLucia
+tetra,TGATAA,-1.6,1.61,Primer3_SantaLucia
+tetra,TGCAAA,-1.6,1.61,Primer3_SantaLucia
+tetra,TGCGAA,-1.1,1.61,Primer3_SantaLucia
+tetra,TGCTTA,0.2,1.61,Primer3_SantaLucia
+tetra,TGGAAA,-1.1,1.61,Primer3_SantaLucia
+tetra,TGGGAA,-1.1,1.61,Primer3_SantaLucia
+tetra,TGGGGA,0.5,0.64,Primer3_SantaLucia
+tetra,TGTAAA,-1.6,1.61,Primer3_SantaLucia
+tetra,TGTGAA,-1.1,1.61,Primer3_SantaLucia
+tetra,TGTTCA,0.8,1.61,Primer3_SantaLucia
+tetra,TTTCGA,-0.2,1.61,Primer3_SantaLucia
+tetra,TTTTGA,0,1.61,Primer3_SantaLucia
+tetra,TTTTTA,-0.5,1.61,Primer3_SantaLucia
