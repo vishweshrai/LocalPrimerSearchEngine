@@ -1,6 +1,6 @@
 %% *Main Script for Running aPCR Design and Simulations*
 % Written by Vishwesh Rai, Laboratory of Nanobiology, IISc Bangalore, INDIA
-% 04-11-2026 23:06 IST
+% 14-11-2026 21:20 IST
 % ____________________________________________________________________________________________________________
 % Solves three types of problems:
 % 1. Simulates aPCR if primer sequences are already available (asks for plasmid details, primer sequences, and
@@ -118,6 +118,8 @@ if ismember(decider, {'Global', 'Local'})
     % than assumed. A missing sheet is better than a crash on the path that still works.
     if isstruct(srchlog)&&isfield(srchlog, 'Parameters')&&~isempty(srchlog.Parameters)
         writetable(srchlog.Parameters, xlsFile, 'Sheet', 'Parameters');
+        % Rows whose Source begins with "User choice" have no literature basis. They are filled amber.
+        HighlightUserChoices(xlsFile, 'Parameters', srchlog.Parameters);
     end
     fprintf('Wrote %s\n', xlsFile);
 end

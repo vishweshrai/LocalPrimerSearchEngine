@@ -1,7 +1,7 @@
-function [tm, info] = DimerMeltTm(seqa, seqb, ca, cb, monv, biv, dNTP, tann, dT)
+function [tm, info] = DimerMeltTm(seqa, seqb, ca, cb, monv, biv, dNTP, tann, dT, mode, tmplmin)
 %% DIMERMELTTM  Melting temperature of the most stable dimer register, at the working concentrations
 % Written for the aPCR suite, Laboratory of Nanobiology, IISc Bangalore, INDIA
-% 06-11-2026 13:20 IST
+% 14-11-2026 20:43 IST
 % ____________________________________________________________________________________________________________
 % PHYSICS
 %
@@ -74,6 +74,13 @@ function [tm, info] = DimerMeltTm(seqa, seqb, ca, cb, monv, biv, dNTP, tann, dT)
 %          the same probe DimerScan is given elsewhere, so the register reported here is the one
 %          the free-energy screen acted on
 %   dT     offset of the second probe, degrees C. Default 5
+%   mode   'any' (default) reads the most stable register anywhere in the duplex, which is the
+%          whole-molecule dimer. 'end' reads the most stable register that pairs the 3' terminal base
+%          of seqa and leaves at least tmplmin partner nucleotides 5' of the base it pairs to, which
+%          is the extendable, 3'-anchored dimer. Primer3 reports the two as the Tm behind
+%          PRIMER_MAX_SELF_ANY_TH and PRIMER_MAX_SELF_END_TH
+%   tmplmin  least number of partner nucleotides 5' of the paired base, used by mode 'end' only.
+%          Default 0. The engine passes DimerTemplateBeyond
 %
 % OUTPUTS
 %   tm     melting temperature of that register, degrees C. NaN when no register carries the
@@ -87,6 +94,7 @@ function [tm, info] = DimerMeltTm(seqa, seqb, ca, cb, monv, biv, dNTP, tann, dT)
 %            .dGAtProbe       dG of the register at tann, kcal/mol
 %            .RegisterStable  false when the winning register moved between the probes
 %            .Align           3-row alignment block for the register at tann
+%            .Mode            'any' or 'end'
 % ____________________________________________________________________________________________________________
 % REFERENCES
 %
@@ -99,6 +107,12 @@ function [tm, info] = DimerMeltTm(seqa, seqb, ca, cb, monv, biv, dNTP, tann, dT)
 RGAS = 1.98720425E-3;               % kcal/mol/K
 
 if (nargin < 9)||isempty(dT), dT = 5; end
+if (nargin < 10)||isempty(mode), mode = 'any'; end
+if (nargin < 11)||isempty(tmplmin), tmplmin = 0; end
+mode = lower(char(mode));
+if ~ismember(mode, {'any', 'end'})
+    error('DimerMeltTm:BadMode', 'mode must be ''any'' or ''end''. Received ''%s''.', mode);
+end
 
 if ~ischar(seqa)&&~isstring(seqa), error('DimerMeltTm:NonChar', 'seqa must be char.'); end
 if ~ischar(seqb)&&~isstring(seqb), error('DimerMeltTm:NonChar', 'seqb must be char.'); end
@@ -133,19 +147,29 @@ if ceff <= 0
 end
 
 info = struct('Kind', kind, 'CEff', ceff, 'dH', NaN, 'dS', NaN, ...
-    'dGAtProbe', NaN, 'RegisterStable', false, 'Align', '');
+    'dGAtProbe', NaN, 'RegisterStable', false, 'Align', '', 'Mode', mode);
 tm = NaN;
 
-[g1, ~, align1, ~] = DimerScan(seqa, seqb, monv, biv, dNTP, tann);
+if strcmp(mode, 'end')
+    % The anchored register is the second and fourth outputs of DimerScan, and tmplmin acts on it.
+    [~, g1, ~, align1] = DimerScan(seqa, seqb, monv, biv, dNTP, tann, [], tmplmin);
+else
+    [g1, ~, align1, ~] = DimerScan(seqa, seqb, monv, biv, dNTP, tann);
+end
 info.dGAtProbe = g1;
 info.Align     = align1;
 if g1 == 0
     % DimerScan reports exactly zero when no register carries its minimum run, which is the
-    % absence of a structure rather than a structure of zero free energy.
+    % absence of a structure rather than a structure of zero free energy. Mode 'end' reports zero
+    % in the same way when no register reaches the 3' terminus.
     return;
 end
 
-[g2, ~, align2, ~] = DimerScan(seqa, seqb, monv, biv, dNTP, tann + dT);
+if strcmp(mode, 'end')
+    [~, g2, ~, align2] = DimerScan(seqa, seqb, monv, biv, dNTP, tann + dT, [], tmplmin);
+else
+    [g2, ~, align2, ~] = DimerScan(seqa, seqb, monv, biv, dNTP, tann + dT);
+end
 if g2 == 0, return; end
 
 info.RegisterStable = isequal(align1, align2);

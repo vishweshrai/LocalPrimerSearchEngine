@@ -1,7 +1,7 @@
 function [cfg, Parameters] = PrimerSearchParameters(input)
 %% PRIMERSEARCHPARAMETERS  Every constant, flag and threshold the aPCR primer search engines run on
 % Written by Vishwesh Rai, Laboratory of Nanobiology, IISc Bangalore, INDIA
-% 12-11-2026 02:16 IST
+% 15-11-2026 18:55 IST
 %
 % Revision history is NOT kept here. See PrimerSearchParameters_<YYYYMMDD>.txt beside this file.
 % ____________________________________________________________________________________________________________
@@ -74,6 +74,19 @@ function [cfg, Parameters] = PrimerSearchParameters(input)
 %       2012;13:134.  doi:10.1186/1471-2105-13-134
 %   Wallace RB, Shaffer J, Murphy RF, et al. Hybridization of synthetic oligodeoxyribonucleotides
 %       to phi chi 174 DNA. Nucleic Acids Res 1979;6:3543-57.  doi:10.1093/nar/6.11.3543
+%   Rychlik W. Selection of primers for polymerase chain reaction. In: White BA, editor. Methods in
+%       Molecular Biology, vol 15, PCR Protocols. Totowa NJ: Humana Press; 1993. p 31-40.  The same
+%       text as the 1995 Mol Biotechnol protocol above. Source of the 3'-terminal pentamer limit of
+%       -9 kcal/mol and of Table 1, the simplified Breslauer nearest-neighbour values at 25 C.
+%   Breslauer KJ, Frank R, Blocker H, Marky LA. Predicting DNA duplex stability from the base
+%       sequence. Proc Natl Acad Sci USA 1986;83:3746-50.  doi:10.1073/pnas.83.11.3746
+%   Rozen S, Skaletsky H. Primer3 on the WWW for general users and for biologist programmers.
+%       Methods Mol Biol 2000;132:365-86.  Primer3 manual, https://primer3.org/manual.html, read
+%       14-11-2026: PRIMER_MAX_END_STABILITY, PRIMER_MAX_SELF_ANY_TH, PRIMER_MAX_SELF_END_TH.
+%   Untergasser A, Nijveen H, Rao X, Bisseling T, Geurts R, Leunissen JAM. Primer3Plus, an enhanced
+%       web interface to Primer3. Nucleic Acids Res 2007;35:W71-4.  doi:10.1093/nar/gkm306
+%   Rivetti C, Walker C, Bustamante C. Polymer chain statistics and conformational analysis of DNA
+%       molecules with bends or sharp kinks. J Mol Biol 1998;280:41-59.
 % ____________________________________________________________________________________________________________
 
 %% ---- SEARCH GEOMETRY --------------------------------------------------------------------------
@@ -86,7 +99,7 @@ fLmin = 18; fLmax = 24;         % Forward primer length
 rLmin = 20; rLmax = 28;         % Reverse primer length
 
 %% ---- MELTING TEMPERATURE ----------------------------------------------------------------------
-Tmin = 58.5; Tmax = 70;         % Primer Tm window, degrees C.
+Tmin = 60; Tmax = 72;         % Primer Tm window, degrees C.
                                 % TMAX IS NOT A PIERCE NUMBER. Converting Pierce's own Series C
                                 % primers into the engine's magnesium-corrected units, with a
                                 % magnesium lift of 5.08 degrees at their buffer of 70 mM
@@ -198,7 +211,7 @@ UseGCWindow = true;             % Enforce the global GC fraction window below.
                                 % Left ON by default because the floor's content is only partly
                                 % covered. Set false to let Tm and the structure stages decide.
 fGCmin = 0.40; fGCmax = 0.65;   % Global GC fraction window
-MonoLim = 4; DiRepLim = 4;      % Longest tolerated homopolymer (nt) and dinucleotide repeat (units).
+MonoLim = 4; DiRepLim = 5;      % Longest tolerated homopolymer (nt) and dinucleotide repeat (units).
                                 % NucleoRun rejects when the longest run EXCEEDS MonoLim, so 4
                                 % admits AAAA and rejects AAAAA. Primer3 expresses the same rule as
                                 % PRIMER_MAX_POLY_X, the maximum allowable mononucleotide repeat,
@@ -212,6 +225,12 @@ MonoLim = 4; DiRepLim = 4;      % Longest tolerated homopolymer (nt) and dinucle
                                 % gate was doing one thing: removing any primer containing AAAA,
                                 % CCCC, GGGG or TTTT, which is 20.3 per cent of the whole pool on a
                                 % natural template.
+                                % DiRepLim was 4 and is 5 from 14-11-2026, at the user's instruction.
+                                % No published figure exists for a dinucleotide repeat limit, so the
+                                % value is a choice and the parameter sheet says so. Rejection is on a
+                                % run that EXCEEDS the limit, so 5 admits five repeats of one
+                                % dinucleotide and rejects six. The earlier run recorded no rejection
+                                % on this rule at 4, so the change widens a gate that was not acting.
                                 % Reference: Untergasser A et al. Primer3, new capabilities and
                                 % interfaces. Nucleic Acids Res 2012;40:e115.
                                 % doi:10.1093/nar/gks596
@@ -265,29 +284,43 @@ ReverseGCSkew        = false;   % Same on the reverse primer. Turning it on reje
                                 % the same strand. drlocgc35 is computed and logged either way.
 
 %% ---- 3'-END STABILITY AND HAIRPINS ------------------------------------------------------------
-EndWin   = 5;                   % 3'-terminal window, both ends. Primer3 defines Max 3' Stability
-                                % on the last five 3' bases, which is the scale dG3min is quoted on.
-UseEndStabilityGate = true;     % Gate on dG3min rather than only scoring the 3'-terminal window
-dG3min   = -5.08;               % kcal/mol on the PUBLISHED scale, used only when UseEndStabilityGate is on
-                                %
-                                % WHICH SCALE THIS IS. Primer3's Max 3' Stability INCLUDES helix
-                                % initiation. EndStability returns the published-scale number
-                                % first and the stacking-only number second, and the two differ by
-                                % the initiation: 1.94 kcal/mol for a GC-terminated pentamer and
-                                % 2.06 for an AT one. Measured against Primer3's own worked values,
-                                % GCGCG is -8.793 stacking-only and -6.856 with the terminal rows
-                                % restored, against their published 6.86; TATAT is -2.933 and
-                                % -0.877 against their 0.86. Compare dG3min against the first of
-                                % the two, never the second.
-                                %
-                                % WHY IT DOES NOT GATE BY DEFAULT. On a mixed-composition target
-                                % the rule rejects almost nothing while a cluster of primers sits
-                                % within a few thousandths of a kcal/mol of the line. A gate that
-                                % decides nothing while standing one rounding error from
-                                % eliminating most of the reverse family is not a gate. Rychlik's
-                                % own framing is relative priming efficiency, not pass or fail, so
-                                % the quantity is carried in Score. Set UseEndStabilityGate = true to
-                                % restore the hard cut.
+EndWin   = 5;                   % 3'-terminal window, both ends. Rychlik (1995) states the rule on
+                                % 3'-terminal pentamers, and Primer3 defines Max 3' Stability on the
+                                % last five 3' bases.
+UseEndStabilityGate = true;     % Gate on the 3'-terminal window rather than only scoring it
+EndStabilityScale = 'Rychlik';  % Scale the gate is read on, 'Rychlik' or 'SantaLucia'.
+                                % Rychlik's rule reads: oligonucleotides whose 3'-terminal pentamer
+                                % is less stable than -9 kcal/mol are more likely to be specific
+                                % primers. His stability is the sum of the four nearest-neighbour
+                                % steps of the simplified Breslauer table (his Table 1), at 25 C,
+                                % with no helix initiation. Primer3Plus ships Max 3' Stability at
+                                % 9.0 on that scale; the Primer3 manual quotes GCGCG as 13.4 and
+                                % TATAC as 4.6 on the Breslauer table, 6.86 and 0.86 on SantaLucia.
+                                % A limit of 9.0 can never fire on the SantaLucia scale, where the
+                                % largest pentamer value is 6.86, and Primer3 itself ships the
+                                % setting at 100, which switches it off. The rule therefore has to
+                                % be applied on Rychlik's own scale, and 'Rychlik' does that.
+                                % 'SantaLucia' reads the unified 37 C scale with initiation
+                                % instead, against dG3min below. Both numbers are logged either way.
+dG3minRychlik = -9.0;           % kcal/mol, used when EndStabilityScale is 'Rychlik'.
+                                % Rychlik (1995) gives -9 and Primer3Plus gives 9.0 with the sign
+                                % flipped. A pentamer at exactly -9.0 passes. Of the 1024 pentamers
+                                % 27 per cent are more stable than -9.0 on this scale, against 11
+                                % per cent beyond the previous -5.08 on the SantaLucia scale, so the
+                                % literature value is the stricter of the two. Rychlik's wording is
+                                % a likelihood and not a pass-or-fail rule; the gate turns it into
+                                % one. The simplified table rounds TA to -1.0 where Breslauer's
+                                % original has -0.9, so TATAC reads 4.8 here against Primer3's 4.6.
+dG3min   = -5.08;               % kcal/mol on the SantaLucia scale with initiation, read only when
+                                % EndStabilityScale is 'SantaLucia'. NO LITERATURE BASIS: this is the
+                                % image on that scale of -7.0 kcal/mol, a figure the suite tightened
+                                % from Rychlik's -9 on a stacking-only scale. Translating Rychlik's
+                                % -9 onto this scale by regression over all pentamers gives about
+                                % -4.2 (r = 0.90, residual SD 0.48 kcal/mol), which is too loose a
+                                % translation to gate on, hence the separate Rychlik scale above.
+                                % Measured against Primer3's own worked values, GCGCG is -8.793
+                                % stacking-only and -6.856 with the terminal rows restored, against
+                                % their published 6.86; TATAT is -2.933 and -0.877 against 0.86.
 dGEndMin = -3.0;                % kcal/mol, least stable EXTENDABLE dimer allowed. Which registers
                                 % count as extendable depends on the enzyme: 3'-anchored ones
                                 % without proofreading, every register with it, because the
@@ -295,6 +328,42 @@ dGEndMin = -3.0;                % kcal/mol, least stable EXTENDABLE dimer allowe
                                 % below. This constant carries most of the dimer protection, since
                                 % phiDimer covers sequestration alone, so it is the number to
                                 % revisit first if dimers appear.
+DimerRule = 'Tm';               % Rule for the homodimer (stage 11) and 3'-anchored self-dimer
+                                % (stage 12) gates: 'Tm', 'dG' or 'both'.
+                                % 'Tm' judges each stage on the melting temperature of its dimer
+                                % against DimerTmMax, following Primer3: PRIMER_MAX_SELF_ANY_TH for
+                                % the whole-molecule dimer and PRIMER_MAX_SELF_END_TH for the
+                                % 3'-anchored one, both 47 C. 'dG' keeps the earlier free-energy
+                                % rules, phiDimer sequestration at stage 11 and dGEndMin
+                                % extensibility at stage 12. 'both' rejects on either.
+                                % The heterodimer and 3'-cross-dimer stages are not touched by this
+                                % setting and keep phiDimer and dGEndMin. Where the melting
+                                % temperature is undefined because the best register moves between
+                                % the two probe temperatures, the free-energy rule decides that
+                                % candidate. Under a proofreading class stage 12 reads the
+                                % whole-molecule dimer, as before.
+DimerTmMax = 47.0;              % C, the Primer3 default for both thermodynamic dimer limits. The
+                                % manual describes it as 10 C below the default PRIMER_MIN_TM of
+                                % 57 C. Tmin here is 58.5 C, so the same offset would give 48.5 C;
+                                % the Primer3 figure itself is kept. A dimer melting ABOVE this
+                                % temperature is rejected.
+DimerTmConc = [];               % M, total strand concentration the dimer melting temperature is
+                                % evaluated at. Empty uses each primer's own working concentration
+                                % (1 uM excess and 20 nM limiting in the usual LATE-PCR set-up),
+                                % which is where the dimer forms and agrees with every other
+                                % melting temperature in the engine. Primer3 evaluates at
+                                % PRIMER_DNA_CONC, 50 nM by default, so the excess primer at 1 uM
+                                % reads roughly 10 C hotter here than Primer3 would report; the
+                                % DimerMeltTm header puts a 20-fold ratio at about 11 K. Set 50E-9
+                                % to reproduce Primer3's reference concentration.
+if ~ismember(EndStabilityScale, {'Rychlik', 'SantaLucia'})
+    error('PrimerSearchParameters:BadEndStabilityScale', ...
+        'EndStabilityScale must be ''Rychlik'' or ''SantaLucia''. Received ''%s''.', EndStabilityScale);
+end
+if ~ismember(DimerRule, {'Tm', 'dG', 'both'})
+    error('PrimerSearchParameters:BadDimerRule', ...
+        'DimerRule must be ''Tm'', ''dG'' or ''both''. Received ''%s''.', DimerRule);
+end
 dGhpmin  = -3.0;                % kcal/mol, free-energy hairpin fallback, used ONLY when the
                                 % annealing temperature is unavailable
 DimerTemplateBeyond = 1;        % nt, least number of partner nucleotides that must lie 5' of the
@@ -323,13 +392,24 @@ HpTmMargin = 5.0;               % Degrees of headroom on the hairpin gate. A hai
                                 % temperature. A structure melting within a few degrees of the
                                 % annealing step is treated as present rather than absent.
 
-%% ---- AMPLICON 3'-OH COLLAPSE (LOG ONLY) ----------------------------------------------------------
+%% Amplicon 3'-OH Collapse (Gate and Ranking)
 % The accumulating single strand ends in a free 3'-OH. If that end folds back onto the strand's own
 % body, leaves its terminal base paired and has template beyond the stem, the polymerase extends it
 % and the strand lengthens in an unintended way. ScaffoldCollapseCheck screens both strands of every
-% accepted pair for this. The result is WRITTEN to Pair_Log and Candidate_Primers and is never used
-% to reject a pair or to move Score. Gating waits until the logged numbers have been read against
-% real runs.
+% pair that clears the dimer gates, and the result is written to Pair_Log and Candidate_Primers.
+% Two uses are made of it. A REJECT state in the declared enzyme channel rejects the pair, because
+% a fold that persists at the annealing temperature with a fully paired 3' end is extended whenever
+% the polymerase meets it. Every other state is priced in Score. The price is the extendable
+% fraction of the declared channel, pColl, the larger of the two strands, read against a tolerance
+% CollapseTol as decades above it:
+%       dec = log10(pColl/CollapseTol) + CollapseFlagDecades*[a strand sits in the FLAG tier]
+%       s_C = WtCollapse*min(max(dec, 0), CollapseCap)
+% The FLAG increment stands for a persistent fold whose 3' mismatch limits extension: the
+% equilibrium extendable fraction counts it as a duty cycle, and a fold that lasts through the
+% extension step is extended over the whole step. No published value of CollapseTol or of the FLAG
+% increment exists. CollapseTol is set to the pool fraction of the dimer gate, because the loss is
+% the same kind of quantity, a fraction of the strand pool taken out of the reaction at each
+% annealing step.
 %
 % The hairpin is unimolecular, so its melting temperature has no concentration dependence and is a
 % complete statement of occupancy. A fold persists when its Tm reaches AnnealingTemperature less
@@ -372,6 +452,13 @@ CollapseExoBlend = NaN;         % Fraction phi of 3' end engagements served by a
                                 % Taq and Exo channels are always reported separately.
 CollapseExoEndTol = 15;         % nt, longest unpaired 3' flap the Exo channel counts. Clamped to
                                 % CollapseWindow - CollapseMinRun. The Taq channel always uses one.
+CollapseGate = true;            % Reject a pair when either strand holds a REJECT-tier state in the
+                                % declared enzyme channel. False logs and ranks without rejecting.
+CollapseTol = 1E-3;             % Tolerated extendable fraction of a strand pool per annealing step,
+                                % the same pool fraction as the dimer gate. Below it a pair pays
+                                % nothing in Score. Not a published number; see the section comment.
+CollapseFlagDecades = 1.0;      % Decades added to the penalty of a strand in the FLAG tier, standing
+                                % for a persistent fold that is extended over the whole step.
 
 %% ---- SPECIFICITY -------------------------------------------------------------------------------
 phi        = 1E-4;              % MISPRIMING tolerance: the ratio of unwanted to wanted complex AT
@@ -405,7 +492,7 @@ phiDimer   = 1E-3;              % DIMER tolerance: the fraction of the PRIMER PO
                                 % THE VALUE IS CONDITIONED ON THE ENZYME. With a proofreading
                                 % exonuclease declared it is tightened to phi below, because
                                 % dGEndMin can no longer carry extensibility on its own.
-EndKmer    = 7;                 % Length of the 3'-terminal k-mer tested for uniqueness
+EndKmer    = 8;                 % Length of the 3'-terminal k-mer tested for uniqueness
 EndKmerMax = 1;                 % Maximum occurrences of that k-mer on both strands. One means the
                                 % primer's own site and nowhere else.
 
@@ -454,7 +541,7 @@ EndKmerMax = 1;                 % Maximum occurrences of that k-mer on both stra
 % so at these settings the terminal run gate shows no rejections of its own and the k-mer stage
 % holds them. The two part company as soon as either constant is moved, and both quantities are
 % logged for every candidate, so a log can be re-read at a different threshold without rescanning.
-Use3PrimeRunGate  = true;       % Gate the 3'-terminal contiguous non-cognate run at MaxRun3
+Use3PrimeRunGate  = false;      % Gate the 3'-terminal contiguous non-cognate run at MaxRun3
 MaxRun3    = 7;                 % Reject when the longest contiguous run ENDING AT the primer 3'
                                 % terminus that also occurs somewhere else on either strand reaches
                                 % this length. Rejection is pRun3 >= MaxRun3.
@@ -801,7 +888,14 @@ else
     AccSalt = input.MonovalentCationConcentration;
     AccSaltSrc = 'input.MonovalentCationConcentration';
 end
-AccMaxOpen = 8.0;               % kcal/mol; reject a site costing more than this to open
+AccMaxOpen = 6.0;               % kcal/mol; reject a site costing more than this to open.
+                                % Was 8.0, then 5.0 on 14-11-2026, and is 6.0 from 15-11-2026, at the
+                                % user's instruction. No published figure exists for this limit, so
+                                % the value is a choice and the parameter sheet says so. At 5.0 with the
+                                % Rychlik limit of -9.0 no reverse primer pair survived the Tm offset
+                                % gate (run of 15-11-2026 01:28); at 6.0 the reverse primers whose sites
+                                % cost 5.47 to 5.55 kcal/mol to open are admitted again.
+                                % WtAccess follows this setting, see below.
 AccParamFile = 'C:\Program Files (x86)\ViennaRNA Package\Misc\dna_mathews2004.par';
                                 % Full path to dna_mathews2004.par, set explicitly rather than left
                                 % to DNAAccessibility's own search. The search itself is sound and
@@ -875,12 +969,19 @@ EnsCap = 2.5;                   % kcal/mol, ceiling on the ensemble shift before
                                 % reverse, reaching 2.19 at worst. 2.5 clears the measured range
                                 % with a little room and bounds a term that would otherwise grow
                                 % with the log of a register count.
+CollapseCap = 3.0;              % decades, ceiling on the collapse penalty before WtCollapse is applied.
+                                % Three decades above CollapseTol is an extendable fraction of one
+                                % strand in a few, past which the pair is dominated by the term.
+WtCollapse = MarginCap/CollapseCap;  % Tied to MarginCap by construction, as WtEns is. The term's full
+                                % span is MarginCap Score points, the same as dimer headroom.
 WtEns = MarginCap/EnsCap;       % TIED TO MarginCap BY CONSTRUCTION, exactly as WtAccess is.
                                 % The term's full span is then MarginCap Score points, so
                                 % off-target multiplicity can move a candidate by as much as dimer
                                 % headroom can and no further. Changing EnsCap or MarginCap means
                                 % this number follows automatically.
-WtAccess = 0.3125;              % Per kcal/mol of summed opening cost, forward site plus reverse.
+WtAccess = MarginCap/(2*AccMaxOpen);  % Per kcal/mol of summed opening cost, forward site plus reverse.
+                                % Computed from AccMaxOpen since 14-11-2026. It was the literal 0.3125,
+                                % which is this expression at AccMaxOpen = 8. It is 0.5 at 5 and 0.4167 at 6.
                                 % TIED TO AccMaxOpen BY CONSTRUCTION: MarginCap/(2*AccMaxOpen).
                                 % The gate admits a site costing up to AccMaxOpen to open, so a
                                 % pair can carry twice that before it is rejected. At a weight of
@@ -987,6 +1088,7 @@ ProgressEvery = 50;             % Console progress is emitted every this many ca
 % different places and a reader chasing a result needs to know which file to open.
 ParamSpec = {
 % Section                Name                      Value                   Units        Meaning
+% The Source column is added below by ParamSourceFor, which refuses a name it has no entry for.
 'Template (input)'     , 'input.PlasmidFileName' , input.PlasmidFileName , 'file'     , 'Sequence file the run was launched on'
 'Template (input)'     , 'input.PlasmidSequence' , SeqText(input.PlasmidSequence)   , 'summary'  , 'Length, GC fraction and an FNV-1a checksum. The checksum is what makes a run reproducible, since two files can share a name'
 'Template (input)'     , 'input.PlasmidStranded' , input.PlasmidStranded , '1 or 2'   , 'Strandedness of the template as supplied'
@@ -1042,17 +1144,22 @@ ParamSpec = {
 'Terminal bases'       , 'ForwardGCSkew'         , ForwardGCSkew         , 'flag'     , 'Gate the forward primer on local 3''-versus-5'' GC skew'
 'Terminal bases'       , 'ReverseGCSkew'         , ReverseGCSkew         , 'flag'     , 'Gate the reverse primer on local 3''-versus-5'' GC skew'
 '3'' end stability'     , 'EndWin'                , EndWin                , 'nt'       , 'Window for the 3''-terminal stacking free energy'
-'3'' end stability'     , 'UseEndStabilityGate'            , UseEndStabilityGate            , 'flag'     , 'Gate the 3''-terminal window on dG3min rather than only scoring it'
-'3'' end stability'     , 'dG3min'                , dG3min                , 'kcal/mol' , 'Least stable 3'' terminal window allowed when the gate is on'
+'3'' end stability'     , 'UseEndStabilityGate'            , UseEndStabilityGate            , 'flag'     , 'Gate the 3''-terminal window rather than only scoring it'
+'3'' end stability'     , 'EndStabilityScale'     , EndStabilityScale     , 'scale'    , 'Rychlik reads Rychlik 1995 Table 1, Breslauer values at 25 C without initiation. SantaLucia reads the unified 37 C scale with initiation'
+'3'' end stability'     , 'dG3minRychlik'         , dG3minRychlik         , 'kcal/mol' , 'Least stable 3'' terminal pentamer allowed on the Rychlik scale. Primer3Plus ships 9.0 on the same scale'
+'3'' end stability'     , 'dG3min'                , dG3min                , 'kcal/mol' , 'Same limit on the SantaLucia scale. Read only when EndStabilityScale is SantaLucia'
 '3'' end stability'     , 'Rychlik.On'            , Rychlik.On            , 'flag'     , 'Apply the Rychlik cap on per-locus 3'' terminal stability'
 '3'' end stability'     , 'Rychlik.Max'           , Rychlik.Max           , 'kcal/mol' , 'Rychlik cap value'
 '3'' end stability'     , 'Rychlik.T'             , Rychlik.T             , 'C'        , 'Temperature the Rychlik cap is evaluated at'
 '3'' end stability'     , 'Rychlik.Na'            , Rychlik.Na            , 'M'        , 'Monovalent salt the Rychlik cap is evaluated at'
 'Dimers and hairpins'  , 'dGEndMin'              , dGEndMin              , 'kcal/mol' , 'Least stable EXTENDABLE dimer allowed. Carries most of the dimer protection'
+'Dimers and hairpins'  , 'DimerRule'             , DimerRule             , 'rule'     , 'Tm, dG or both for the homodimer and 3''-anchored self-dimer gates. Tm follows Primer3. Heterodimer and 3''-cross-dimer always use dG'
+'Dimers and hairpins'  , 'DimerTmMax'            , DimerTmMax            , 'C'        , 'Highest dimer melting temperature allowed under the Tm rule. Primer3 default for PRIMER_MAX_SELF_ANY_TH and PRIMER_MAX_SELF_END_TH'
+'Dimers and hairpins'  , 'DimerTmConc'           , ConcText2(DimerTmConc) , 'M'       , 'Strand concentration the dimer Tm is evaluated at. Empty uses each primer''s working concentration. Primer3 uses 50 nM'
 'Dimers and hairpins'  , 'dGhpmin'               , dGhpmin               , 'kcal/mol' , 'Hairpin free-energy fallback, used only when the annealing temperature is unavailable'
 'Dimers and hairpins'  , 'DimerTemplateBeyond'   , DimerTemplateBeyond   , 'nt'       , 'Partner nucleotides required 5'' of the base paired to a primer 3'' terminus for the dimer to count as extendable. 0 restores the earlier rule'
 'Dimers and hairpins'  , 'HpTmMargin'            , HpTmMargin            , 'C'        , 'Headroom on the hairpin melting-temperature gate'
-'Amplicon collapse'    , 'CollapseLog'           , CollapseLog           , 'flag'     , 'Screen accepted pairs for amplicon 3''-OH collapse. Log only, never gates or scores'
+'Amplicon collapse'    , 'CollapseLog'           , CollapseLog           , 'flag'     , 'Screen pairs for amplicon 3''-OH collapse. Needed by both the gate and the Score term'
 'Amplicon collapse'    , 'CollapseWindow'        , CollapseWindow        , 'nt'       , 'Length of the 3''-terminal window searched for stems'
 'Amplicon collapse'    , 'CollapseMinRun'        , CollapseMinRun        , 'nt'       , 'Shortest contiguous Watson-Crick run that counts as a stem'
 'Amplicon collapse'    , 'CollapseFlagEps'       , CollapseFlagEps       , 'ratio'    , 'Lowest extension efficiency that still earns a FLAG or TRANSIENT tier'
@@ -1061,6 +1168,9 @@ ParamSpec = {
 'Amplicon collapse'    , 'CollapseBimolecular'   , CollapseBimolecular   , 'flag'     , 'Include the bimolecular channel: the 3'' tail pairing with the same stem on a second strand'
 'Amplicon collapse'    , 'CollapseExoBlend'      , CollapseExoBlend      , 'fraction' , 'Fraction of 3'' end engagements served by a proofreading enzyme. NaN leaves the blend column empty'
 'Amplicon collapse'    , 'CollapseExoEndTol'     , CollapseExoEndTol     , 'nt'       , 'Longest unpaired 3'' flap the Exo channel counts. The Taq channel counts one'
+'Amplicon collapse'    , 'CollapseGate'          , CollapseGate          , 'flag'     , 'Reject a pair whose strand holds a REJECT-tier state in the declared enzyme channel'
+'Amplicon collapse'    , 'CollapseTol'           , CollapseTol           , 'fraction' , 'Tolerated extendable fraction of a strand pool per annealing step. Below it the Score term is zero'
+'Amplicon collapse'    , 'CollapseFlagDecades'   , CollapseFlagDecades   , 'decades'  , 'Decades added to the collapse penalty of a strand in the FLAG tier'
 'Specificity'          , 'phi'                   , phi                   , 'ratio'    , 'Mispriming tolerance, off-target over cognate duplex AT ONE SITE'
 'Specificity'          , 'phiDimer'              , phiDimer              , 'fraction' , 'Dimer tolerance, fraction of the PRIMER POOL held as dimer'
 'Specificity'          , 'EndKmer'               , EndKmer               , 'nt'       , 'Length of the 3''-terminal k-mer tested for uniqueness'
@@ -1099,6 +1209,8 @@ ParamSpec = {
 'Ranking weights'      , 'TmACap'                , TmACap                , 'e-folds'  , 'Ceiling on the amplicon yield penalty before WtTmA is applied'
 'Ranking weights'      , 'WtFlank'               , WtFlank               , 'points'   , 'Score points across the whole admissible amplicon overhang, fFlex + rFlex'
 'Ranking weights'      , 'WtTmA'                 , WtTmA                 , 'per e-fold', 'Score points per e-fold loss of linear-phase slope, from Pierce'
+'Ranking weights'      , 'CollapseCap'           , CollapseCap           , 'decades'  , 'Ceiling on the collapse penalty before WtCollapse is applied'
+'Ranking weights'      , 'WtCollapse'            , WtCollapse            , 'per decade', 'Weight on decades of extendable collapse above CollapseTol, set to MarginCap/CollapseCap'
 'Ranking weights'      , 'WtHairpin'             , WtHairpin             , 'per unit' , 'Weight on the worst folded fraction at the annealing step'
 'Ranking weights'      , 'Wt3End'                , Wt3End                , 'per kcal' , 'Weight on the 3''-terminal stacking free energy'
 'Ranking weights'      , 'WtProf'                , WtProf                , 'per kcal' , 'Weight on the internal-stability profile'
@@ -1112,8 +1224,8 @@ ParamSpec = {
 };
 Parameters = table(string(ParamSpec(:, 1)), string(ParamSpec(:, 2)), ...
     string(cellfun(@ParamText, ParamSpec(:, 3), 'UniformOutput', false)), ...
-    string(ParamSpec(:, 4)), string(ParamSpec(:, 5)), ...
-    'VariableNames', {'Section', 'Parameter', 'Value', 'Units', 'Meaning'});
+    string(ParamSpec(:, 4)), string(ParamSpec(:, 5)), ParamSourceFor(ParamSpec(:, 2)), ...
+    'VariableNames', {'Section', 'Parameter', 'Value', 'Units', 'Meaning', 'Source'});
 AssertParamSheetComplete(who, fieldnames(input), ParamSpec);
 
 %% ---- THE RETURNED CONFIGURATION ------------------------------------------------------------------
@@ -1131,12 +1243,15 @@ cfg = struct( ...
     'ForwardAvoid3primeT', ForwardAvoid3primeT, 'ReverseForce3primeGC', ReverseForce3primeGC, ...
     'ForwardGCSkew', ForwardGCSkew, 'ReverseGCSkew', ReverseGCSkew, ...
     'EndWin', EndWin, 'UseEndStabilityGate', UseEndStabilityGate, 'dG3min', dG3min, ...
+    'EndStabilityScale', EndStabilityScale, 'dG3minRychlik', dG3minRychlik, ...
+    'DimerRule', DimerRule, 'DimerTmMax', DimerTmMax, 'DimerTmConc', DimerTmConc, ...
     'dGEndMin', dGEndMin, 'dGhpmin', dGhpmin, 'HpTmMargin', HpTmMargin, ...
     'DimerTemplateBeyond', DimerTemplateBeyond, ...
     'CollapseLog', CollapseLog, 'CollapseWindow', CollapseWindow, 'CollapseMinRun', CollapseMinRun, ...
     'CollapseFlagEps', CollapseFlagEps, 'CollapseLBase', CollapseLBase, 'CollapseLPers', CollapseLPers, ...
     'CollapseBimolecular', CollapseBimolecular, 'CollapseExoBlend', CollapseExoBlend, ...
-    'CollapseExoEndTol', CollapseExoEndTol, ...
+    'CollapseExoEndTol', CollapseExoEndTol, 'CollapseGate', CollapseGate, 'CollapseTol', CollapseTol, ...
+    'CollapseFlagDecades', CollapseFlagDecades, ...
     'phi', phi, 'phiDimer', phiDimer, 'EndKmer', EndKmer, 'EndKmerMax', EndKmerMax, ...
     'Use3PrimeRunGate', Use3PrimeRunGate, 'MaxRun3', MaxRun3, ...
     'UseInternalRunGate', UseInternalRunGate, 'MaxRunInt', MaxRunInt, ...
@@ -1152,13 +1267,157 @@ cfg = struct( ...
     'AccParamFile', AccParamFile, ...
     'AccCacheOn', AccCacheOn, 'AccCacheRoot', AccCacheRoot, 'AccCacheWrite', AccCacheWrite, ...
     'WtMargin', WtMargin, 'MarginCap', MarginCap, 'WtMisp', WtMisp, 'MispCap', MispCap, ...
-    'WtEns', WtEns, 'EnsCap', EnsCap, ...
+    'WtEns', WtEns, 'EnsCap', EnsCap, 'WtCollapse', WtCollapse, 'CollapseCap', CollapseCap, ...
     'WtAccess', WtAccess, 'WtTmA', WtTmA, 'TmACap', TmACap, 'WtFlank', WtFlank, ...
     'WtHairpin', WtHairpin, ...
     'Wt3End', Wt3End, 'WtProf', WtProf, 'Wt3Base', Wt3Base, ...
     'EffTableFile', EffTableFile, 'Base3Spread', Base3Spread, ...
     'Verbose', Verbose, 'ProgressEvery', ProgressEvery);
 AssertConfigMatchesSheet(cfg, ParamSpec);
+end
+
+%% ____________________________________________________________________________________________________________
+function out = ParamSourceFor(names)
+%% PARAMSOURCEFOR  Where each setting's value comes from, one string per name
+% Written for the aPCR suite, Laboratory of Nanobiology, IISc Bangalore, INDIA
+% 14-11-2026 20:43 IST
+%
+% The Source column of the parameter sheet. A value is one of
+%   Literature     taken from a named paper or manual
+%   User choice    a decision with no published basis. The sheet highlights these rows and the
+%                  console lists them, so the reader can see which numbers are judgements. A choice
+%                  that deviates from a published figure carries that figure in brackets.
+%   Derived        computed from other settings or from the reaction, so it has no value of its own
+%   Experiment input   supplied through CollectaPCRData_Claude
+%   Implementation setting   changes how the engine runs and makes no claim about the chemistry
+% The classification follows the reason written beside each setting in this file. A name with no
+% entry here is an error, so a setting added later cannot reach the sheet without being classified.
+tab = {
+'fFlex', 'User choice'
+'rFlex', 'User choice'
+'fLmin', 'User choice'
+'fLmax', 'User choice'
+'rLmin', 'User choice'
+'rLmax', 'User choice'
+'Tmin', 'User choice'
+'Tmax', 'User choice (not a Pierce 2005 number)'
+'dTrfmin', 'Literature: Pierce 2005 (floor of the offset)'
+'dTrfmax', 'User choice (the ceiling is not from Pierce 2005)'
+'dTsub', 'User choice'
+'TmAmaxGap', 'Literature: Pierce 2005 tested gap (advisory only)'
+'TmAoptGap', 'Literature: Pierce 2005 (best tested gap)'
+'TmAPierceGap', 'Literature: Pierce 2005'
+'TmAPierceSlope', 'Literature: Pierce 2005'
+'UseTmAEquiv', 'Literature: von Ahsen 2001 (reporting only)'
+'UseGCWindow', 'User choice'
+'fGCmin', 'User choice'
+'fGCmax', 'User choice'
+'MonoLim', 'User choice (Primer3 default is 5, Untergasser 2012)'
+'DiRepLim', 'User choice (no published figure)'
+'Force5primeGC', 'User choice (switched off)'
+'ForwardForce3primeAT', 'User choice (switched off)'
+'ForwardAvoid3primeT', 'Literature: Kwok 1990, Huang 1992'
+'ReverseForce3primeGC', 'User choice (switched off)'
+'ForwardGCSkew', 'User choice (switched off)'
+'ReverseGCSkew', 'User choice (switched off)'
+'EndWin', 'Literature: Rychlik 1995, Primer3 (pentamer)'
+'UseEndStabilityGate', 'Literature: Rychlik 1995, Primer3Plus'
+'EndStabilityScale', 'Literature: Rychlik 1995 Table 1 (Breslauer 1986)'
+'dG3minRychlik', 'Literature: Rychlik 1995, Primer3Plus default 9.0'
+'dG3min', 'User choice (inactive; tightened Rychlik figure, no source)'
+'Rychlik.On', 'Literature: Rychlik 1995 (Biotechniques)'
+'Rychlik.Max', 'Literature: Rychlik 1995 (Biotechniques); scale of the figure unconfirmed'
+'Rychlik.T', 'User choice (assumed reference state)'
+'Rychlik.Na', 'User choice (assumed reference state)'
+'dGEndMin', 'User choice (own derivation)'
+'DimerRule', 'Literature: Primer3 manual (thermodynamic dimer limits)'
+'DimerTmMax', 'Literature: Primer3 manual (default 47 C)'
+'DimerTmConc', 'User choice (Primer3 evaluates at 50 nM)'
+'dGhpmin', 'User choice (fallback only)'
+'DimerTemplateBeyond', 'Derived (physical minimum of one template nucleotide)'
+'HpTmMargin', 'User choice'
+'CollapseLog', 'User choice'
+'CollapseWindow', 'User choice'
+'CollapseMinRun', 'User choice'
+'CollapseFlagEps', 'User choice'
+'CollapseLBase', 'Literature: Aksel 2024 supplement, Rivetti 1998'
+'CollapseLPers', 'Literature: Aksel 2024 supplement, Rivetti 1998'
+'CollapseBimolecular', 'User choice'
+'CollapseExoBlend', 'User choice (blend fraction unpublished by the supplier)'
+'CollapseExoEndTol', 'User choice'
+'CollapseGate', 'User choice'
+'CollapseTol', 'User choice'
+'CollapseFlagDecades', 'User choice'
+'phi', 'User choice (own tolerance, Limiting Off-Target Priming note)'
+'phiDimer', 'User choice (own tolerance)'
+'EndKmer', 'User choice (chance-match arithmetic; Primer-BLAST word size is 7, Ye 2012)'
+'EndKmerMax', 'User choice (the primer''s own site only)'
+'Use3PrimeRunGate', 'User choice'
+'MaxRun3', 'User choice (chance-match arithmetic)'
+'UseInternalRunGate', 'User choice'
+'MaxRunInt', 'User choice (chance-match arithmetic)'
+'RunMinReport', 'Implementation setting'
+'RunPoolFloor', 'User choice'
+'MispMinRun', 'User choice'
+'MispSurveyRun', 'User choice'
+'MispEndTol', 'Literature: Huang 1992, Kwok 1990 (Taq cannot remove a 3'' overhang)'
+'MispMargin', 'User choice'
+'MispEndWin', 'Literature: Rychlik 1995, Primer3 (pentamer)'
+'ProofExoClass', 'Experiment input (polymerase)'
+'ProofExo', 'Derived'
+'UseExtensionEfficiency', 'Literature: Huang 1992, Rejali 2018'
+'UseAccessibility', 'User choice'
+'AccW', 'User choice'
+'AccL', 'User choice'
+'AccSaltOverride', 'Derived (empty derives the fold salt from the buffer)'
+'UseAccSaltEquiv', 'Literature: von Ahsen 2001'
+'AccSalt', 'Derived'
+'AccSaltSrc', 'Derived'
+'AccMaxOpen', 'User choice (no published figure)'
+'AccParamFile', 'Implementation setting (Mathews 2004 DNA parameters)'
+'AccCacheOn', 'Implementation setting'
+'AccCacheRoot', 'Implementation setting'
+'AccCacheWrite', 'Implementation setting'
+'WtMargin', 'User choice'
+'MarginCap', 'User choice'
+'WtMisp', 'User choice'
+'MispCap', 'User choice'
+'WtAccess', 'Derived (MarginCap/(2*AccMaxOpen))'
+'TmACap', 'User choice'
+'WtFlank', 'User choice'
+'WtTmA', 'User choice (scale); slopes are from Pierce 2005'
+'CollapseCap', 'User choice'
+'WtCollapse', 'Derived (MarginCap/CollapseCap)'
+'WtHairpin', 'User choice'
+'Wt3End', 'User choice'
+'WtProf', 'User choice'
+'EffTableFile', 'Literature: Huang 1992 (built-in table) or Rejali 2018'
+'EnsCap', 'User choice (set from a 04-11-2026 calibration run)'
+'WtEns', 'Derived (MarginCap/EnsCap)'
+'Base3Spread', 'Derived (from the active efficiency table)'
+'Wt3Base', 'Derived (calibrated to Base3Spread)'
+'Verbose', 'Implementation setting'
+'ProgressEvery', 'Implementation setting'
+'TAnneal', 'Derived (lowest annealing temperature of the programme)'
+};
+names = names(:);
+out = cell(numel(names), 1);
+for q = 1:numel(names)
+    nm = names{q};
+    if startsWith(nm, 'input.')
+        out{q} = 'Experiment input';
+        continue
+    end
+    k = find(strcmp(tab(:, 1), nm), 1);
+    if isempty(k)
+        error('PrimerSearchParameters:NoSource', ...
+            ['Setting %s has no entry in ParamSourceFor. Say where its value comes from, ' ...
+            'Literature, User choice, Derived or Implementation setting, so the parameter sheet ' ...
+            'can show it.'], nm);
+    end
+    out{q} = tab{k, 2};
+end
+out = string(out);
 end
 
 %% ____________________________________________________________________________________________________________

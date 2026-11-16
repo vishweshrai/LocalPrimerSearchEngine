@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 SelfCollapseCheck.py
-12-11-2026 02:17 IST
+12-11-2026 19:53 IST
 Written for the aPCR suite, Laboratory of Nanobiology, IISc Bangalore, INDIA
 
 What This Script Does
@@ -147,6 +147,7 @@ L_PERS_NM = 0.9           # persistence length of ssDNA (nm)
 MIN_RUN = 3 # Shortest Watson-Crick run that counts as a stem (nt)
 TAQ_END_TOL = 1 # Unpaired 3' bases that a polymerase without exonuclease tolerates
 FOLD_DG_CUT = 13.5 # A state whose dG_fold exceeds this (kcal/mol) carries no weight and is dropped
+FLAP_END_MM = False # Terminal mismatch of the unpaired 3' base of a flap. Off, to match dGDangle.m, where the 3' end sits in the polymerase and takes no dangling-end term
 COMP =str.maketrans("ACGTacgt", "TGCAtgca")
 WC_PAIRS = {("A", "T"), ("T", "A"), ("G", "C"), ("C", "G")}
 
@@ -332,7 +333,7 @@ def stem_energy(scaf: str, tail: str, opp: str, r0: int, i_s: int, j_s: int, tem
     t_end = L_max - W + j_s
     b_start = r0 + W - 1 - j_s
     dg_st = score_stem_duplex(tail[i_s:j_s+1], opp[i_s:j_s+1], temp_c, na_eq, init_terms)
-    if (j_s < W - 1) and (b_start > 0): # Flap end: terminal mismatch of the unpaired 3' base
+    if FLAP_END_MM and (j_s < W - 1) and (b_start > 0): # Flap end: terminal mismatch of the unpaired 3' base
         dg_st += dg_term_mm(scaf[t_end], scaf[t_end+1], scaf[b_start], scaf[b_start-1], temp_c)
     return dg_st
 
@@ -846,6 +847,7 @@ def main():
     ap.add_argument("--fwd-conc-nM", type=float, default=1000.0, help="Excess (forward) primer concentration (nM), the ceiling of the (+) strand")
     ap.add_argument("--rev-conc-nM", type=float, default=20.0, help="Limiting (reverse) primer concentration (nM), the ceiling of the (-) strand")
     ap.add_argument("--no-bimolecular", action="store_true", help="Leave the bimolecular state out of the channel totals")
+    ap.add_argument("--flap-end-mismatch", action="store_true", help="Add the terminal mismatch of the unpaired 3' base of a flap to the stem energy. Off by default, as in dGDangle.m and the MATLAB engine")
     ap.add_argument("--exo-blend", type=float, default=None, help="Fraction phi of 3' end engagements served by the proofreading enzyme (0 to 1); the blend is shown only when set")
     ap.add_argument("--exo-end-tol", type=int, default=15, help="Unpaired 3' bases that the proofreading channel counts (clamped to window - 3)")
     ap.add_argument("--out", type=str, default="scaffold_3prime_collapse_map.html")
@@ -853,6 +855,8 @@ def main():
     if (args.exo_blend is not None) and not (0.0 <= args.exo_blend <= 1.0):
         ap.error("--exo-blend must lie between 0 and 1")
     bimol = not args.no_bimolecular
+    global FLAP_END_MM
+    FLAP_END_MM = args.flap_end_mismatch
 
     seq_file = ask(args.seq_file, "Circular ssDNA sequence file (.fasta/.gb/.txt)", str)
     seq, dna_name = parse_seq_file(seq_file)

@@ -1,7 +1,7 @@
 function [tab, results] = LocalPrimerSearchEngine(input)
 %% LOCALPRIMERSEARCHENGINE  Fixed-scaffold primer pair search for asymmetric (LATE) PCR
 % Written by Vishwesh Rai, Laboratory of Nanobiology, IISc Bangalore, INDIA
-% 12-11-2026 01:53 IST
+% 15-11-2026 01:40 IST
 %
 % Revision history is NOT kept here. See LocalPrimerSearchEngine_<YYYYMMDD>.txt beside this file.
 % Every constant, flag and threshold is set in PrimerSearchParameters.m, which is also where the
@@ -112,11 +112,18 @@ function [tab, results] = LocalPrimerSearchEngine(input)
 %     cheaper, and they stand in front of it.
 %     Both quantities are logged for every candidate whether or not either gate is enforced.
 %
-%  8. 3'-TERMINAL STABILITY.  Free energy of the last EndWin bases at 37 C in 1 M Na+, WITH the
-%     terminal and initiation rows, which is the scale Primer3 quotes Max 3' Stability on. An
-%     over-stabilised 3' end lets a partial match hold long enough to prime. EndStability also
-%     returns the stacking-only value, the 5' window and their difference, which is the internal
-%     stability profile in free-energy form.
+%  8. 3'-TERMINAL STABILITY.  An over-stabilised 3' end lets a partial match hold long enough to
+%     prime. The gate reads the last EndWin bases on the scale chosen by EndStabilityScale. The
+%     default, 'Rychlik', sums Rychlik's Table 1 (Breslauer et al. 1986, 25 C, no initiation) by
+%     RychlikEndStability and rejects a primer whose 3' pentamer is more stable than dG3minRychlik,
+%     -9.0 kcal/mol. That is the quantity Rychlik states his rule on and the one Primer3Plus ships
+%     (9.0). The limit cannot be carried to the SantaLucia scale by arithmetic, since the two scales
+%     agree on all pentamers only to r = 0.90 with a residual SD of 0.48 kcal/mol, so 'SantaLucia'
+%     is kept as an option, read against dG3min. EndStability, on the SantaLucia scale, is still
+%     computed for every candidate because the Score term t3End and the profile term read it. It
+%     returns the stacking-only value, the 5' window and their difference, the internal stability
+%     profile in free-energy form. Both end values are logged: dGf3end and dGr3end on the
+%     SantaLucia scale, dGf3endRyc and dGr3endRyc on Rychlik's.
 %
 %  9. TEMPLATE ACCESSIBILITY.  The binding site must not be buried in template secondary structure.
 %     The reverse primer has to invade a structured circle in cycle one and the forward primer has
@@ -155,6 +162,18 @@ function [tab, results] = LocalPrimerSearchEngine(input)
 %     at the annealing temperature is extendable. dGEndMin then reads the whole-molecule minimum
 %     from stage 11 rather than the anchored minimum from this one. Same constant, applied to the
 %     quantity the enzyme can act on.
+%
+%     DIMER RULE FOR STAGES 11 AND 12.  DimerRule 'Tm' (default) follows Primer3, which limits the
+%     homodimer (PRIMER_MAX_SELF_ANY_TH) and the 3'-anchored self-dimer (PRIMER_MAX_SELF_END_TH) by
+%     the melting temperature of the dimer, 47 C by default. DimerMeltTm gives that temperature,
+%     at DimerTmConc when it is set and at the primer's own working concentration when it is empty.
+%     Stage 11 reads the whole-molecule register (logged as ffTm and rrTm) and stage 12 the
+%     3'-anchored register (logged as ffTmEnd and rrTmEnd), except that with a proofreading
+%     exonuclease stage 12 reads the whole-molecule register, as for the free-energy rule. A
+%     melting temperature that cannot be formed because the best register moves between the two
+%     probe temperatures is decided by the free-energy rule. 'dG' restores the earlier behaviour
+%     and 'both' requires both rules to pass. The heterodimer (stage P) and the 3' cross-dimer
+%     always use the free-energy rule.
 %
 % 13. HAIRPIN, judged on MELTING TEMPERATURE.  A hairpin costs the reaction two unrelated ways.
 %     It sequesters primer, lowering the effective concentration, which is an equilibrium governed
@@ -234,14 +253,18 @@ function [tab, results] = LocalPrimerSearchEngine(input)
 %  P4. 3'-ANCHORED CROSS-DIMER, tested in both orientations because either primer's 3' terminus can
 %      extend. Changes shape under proofreading exactly as stage 12 does, and for the same reason.
 %
-%  P5. AMPLICON 3'-OH COLLAPSE, LOG ONLY.  The single strand that accumulates ends in a free 3'-OH,
+%  P5. AMPLICON 3'-OH COLLAPSE, GATE AND SCORE.  The single strand that accumulates ends in a free 3'-OH,
 %      and so does the limiting-primer strand. Either can fold back on its own body and be extended.
-%      Each accepted pair is screened on both strands by ScaffoldCollapseCheck: a stem plus loop
+%      Each pair that clears P4 is screened on both strands by ScaffoldCollapseCheck: a stem plus loop
 %      scored by nearest neighbours, a persistence test on the fold's melting temperature against
 %      AnnealingTemperature - HpTmMargin, and the extension efficiency of the folded end. The result
 %      is a tier per strand (REJECT, FLAG, TRANSIENT, NONE) with the probability of an extendable
 %      collapse, written to Pair_Log (cp* for the plus strand, cm* for the minus strand) and to
-%      Candidate_Primers. It never rejects a pair and never enters Score.
+%      Candidate_Primers. A REJECT in the declared enzyme channel on either strand removes the pair
+%      (RejectStage Amplicon_Collapse, switched by CollapseGate). Every other state enters Score as
+%      WtCollapse times the decades by which the larger extendable fraction of the two strands
+%      exceeds CollapseTol, plus CollapseFlagDecades when a strand sits in the FLAG tier, capped at
+%      CollapseCap. TRANSIENT folds enter through the extendable fraction alone.
 %      The screen also scores the bimolecular state, in which the 3'-OH pairs with the same stem on a
 %      second copy of the strand, at the strand's ceiling concentration: the excess primer for the
 %      plus strand and the limiting primer for the minus strand. It reports a Taq channel and a
@@ -329,12 +352,16 @@ function [tab, results] = LocalPrimerSearchEngine(input)
 % Sequence dependence of a BULGED base. The review reports A bulges are appreciably more stable
 % than C bulges with G and T between, attributing it to unpublished work, and gives no parameters.
 %
-% HELIX INITIATION FOR A UNIMOLECULAR STRUCTURE. A hairpin stem is scored with dGMismatch, which
-% returns a duplex free energy and so charges an initiation at each end. The review computes a
-% hairpin as salt-corrected stacks plus the loop term with no initiation at all. Removing both ends
-% overshoots Primer3 as far as keeping them undershoots it, so the three models genuinely disagree
-% and the question is left open rather than tuned to match one of them. The residual is about
-% 0.8 kcal/mol on a typical stem.
+% HELIX INITIATION FOR A UNIMOLECULAR STRUCTURE. Decided, not open. A hairpin stem is scored as
+% salt-corrected nearest-neighbour stacks plus the loop terms with no helix initiation, which is
+% how the review of SantaLucia and Hicks (2004, Equations 8 to 11) computes a hairpin, because the stem
+% forms inside one molecule and no second strand has to be brought to it. Stage 13 (LooperMismatch)
+% and stage P5 (ScaffoldCollapseCheck) both follow it. Measured against Primer3 on the 59 hairpins of
+% ValidationHairpinsPrimer3.csv (stems of 5 to 9 bp, loops of 3 to 8 nt, 58 C, 40 mM monovalent,
+% 2.5 mM divalent, 0.8 mM dNTP), the suite's dG at 58 C is 0.16 kcal/mol higher on average (SD 0.60,
+% r 0.95) and its melting temperature 2.2 C lower (SD 2.4, r 0.97). That is inside the 4 C mean error
+% the review reports for its own model on 61 hairpins, and its sign makes the persistence test
+% slightly permissive, which the 5 C HpTmMargin covers. ValidateEngine.m repeats the comparison.
 %
 % ____________________________________________________________________________________________________________
 % OUTPUTS
@@ -369,6 +396,10 @@ function [tab, results] = LocalPrimerSearchEngine(input)
 %   Kwok S, Kellogg DE, McKinney N, et al. Effects of primer-template mismatches on the polymerase
 %       chain reaction. Nucleic Acids Res 1990;18:999-1005.  doi:10.1093/nar/18.4.999
 %   Rychlik W. Priming efficiency in PCR. Biotechniques 1995;18:84-90.  PMID 7702859
+%   Untergasser A, Nijveen H, Rao X, Bisseling T, Geurts R, Leunissen JAM. Primer3Plus, an enhanced
+%       web interface to Primer3. Nucleic Acids Res 2007;35:W71-4.  doi:10.1093/nar/gkm306
+%   Primer3 manual (PRIMER_MAX_END_STABILITY, PRIMER_MAX_SELF_ANY_TH, PRIMER_MAX_SELF_END_TH),
+%       https://primer3.org/manual.html, read 14-11-2026
 %   Rychlik W. Selection of primers for polymerase chain reaction. Mol Biotechnol 1995;3:129-34.
 %       doi:10.1007/BF02789108
 %   Ye J, Coulouris G, Zaretskaya I, Cutcutache I, Rozen S, Madden TL. Primer-BLAST: a tool to
@@ -399,11 +430,14 @@ Force5primeGC = cfg.Force5primeGC; ForwardForce3primeAT = cfg.ForwardForce3prime
 ForwardAvoid3primeT = cfg.ForwardAvoid3primeT; ReverseForce3primeGC = cfg.ReverseForce3primeGC;
 ForwardGCSkew = cfg.ForwardGCSkew; ReverseGCSkew = cfg.ReverseGCSkew;
 EndWin = cfg.EndWin; UseEndStabilityGate = cfg.UseEndStabilityGate; dG3min = cfg.dG3min;
+EndStabilityScale = cfg.EndStabilityScale; dG3minRychlik = cfg.dG3minRychlik;
+DimerRule = cfg.DimerRule; DimerTmMax = cfg.DimerTmMax; DimerTmConc = cfg.DimerTmConc;
 dGEndMin = cfg.dGEndMin; dGhpmin = cfg.dGhpmin; HpTmMargin = cfg.HpTmMargin;
 CollapseLog = cfg.CollapseLog; CollapseWindow = cfg.CollapseWindow; CollapseMinRun = cfg.CollapseMinRun;
 CollapseFlagEps = cfg.CollapseFlagEps; CollapseLBase = cfg.CollapseLBase; CollapseLPers = cfg.CollapseLPers;
 CollapseBimolecular = cfg.CollapseBimolecular; CollapseExoBlend = cfg.CollapseExoBlend;
 CollapseExoEndTol = cfg.CollapseExoEndTol; DimerTemplateBeyond = cfg.DimerTemplateBeyond;
+CollapseGate = cfg.CollapseGate; CollapseTol = cfg.CollapseTol; CollapseFlagDecades = cfg.CollapseFlagDecades;
 phi = cfg.phi; phiDimer = cfg.phiDimer;
 EndKmer = cfg.EndKmer; EndKmerMax = cfg.EndKmerMax;
 Use3PrimeRunGate = cfg.Use3PrimeRunGate; MaxRun3 = cfg.MaxRun3;
@@ -422,7 +456,7 @@ WtMargin = cfg.WtMargin; MarginCap = cfg.MarginCap; WtMisp = cfg.WtMisp; MispCap
 WtAccess = cfg.WtAccess; WtTmA = cfg.WtTmA; TmACap = cfg.TmACap;
 WtFlank = cfg.WtFlank; WtHairpin = cfg.WtHairpin;
 Wt3End = cfg.Wt3End; WtProf = cfg.WtProf; Wt3Base = cfg.Wt3Base;
-WtEns = cfg.WtEns; EnsCap = cfg.EnsCap;
+WtEns = cfg.WtEns; EnsCap = cfg.EnsCap; WtCollapse = cfg.WtCollapse; CollapseCap = cfg.CollapseCap;
 Verbose = cfg.Verbose; ProgressEvery = cfg.ProgressEvery;
 
 RunClock = tic;
@@ -464,7 +498,7 @@ sigreq = {'PrimTemp', 7, 3; 'dGPrim', 6, 1; 'dGMismatch', 10, 1; 'dGmaxMismatch'
     'NNParams', 1, 1; 'dGDangle', 5, 4; 'dGTerminalMismatch', 6, 4; 'dGBulge', 5, 2; ...
     'BestSubRegister', 10, 1; 'ExtensionEfficiency', 3, 1; ...
     'ExtensionEfficiencyTable', 2, 1; ...
-    'DimerMeltTm', 9, 2; ...
+    'DimerMeltTm', 11, 2; 'RychlikEndStability', 2, 1; 'DimerTmVerdict', 5, 1; ...
     ... % ExtensionEfficiencyTable owns the session's choice of efficiency table. A missing
     ... % copy makes ExtensionEfficiency fall back to the built-in Huang values while the
     ... % Parameters sheet still reports whatever EffTableFile was set to, which is the one
@@ -527,10 +561,11 @@ if ~isempty(stale)
         strjoin(stale, sprintf('\n   ')));
 end
 
-% The collapse screen is log-only, so a missing copy switches it off with a warning and the search runs.
+% A missing copy switches the collapse screen off with a warning and the search runs. Stage P5 then
+% neither rejects nor prices anything, so the ranking is that of a run without the stage.
 if CollapseLog&&(isempty(which('ScaffoldCollapseCheck'))||isempty(which('BimolecularTm')))
     warning('LocalPrimerSearchEngine:NoCollapseCheck', ...
-        'ScaffoldCollapseCheck.m or BimolecularTm.m is not on the path; the amplicon collapse log is switched off.');
+        'ScaffoldCollapseCheck.m or BimolecularTm.m is not on the path; the amplicon collapse stage (gate and Score term) is switched off.');
     CollapseLog = false;
 end
 
@@ -586,8 +621,16 @@ if Verbose
         onoff(ForwardGCSkew), onoff(ReverseGCSkew), onoff(Force5primeGC));
     fprintf('      3'' base clamps     fwd A-or-T %s, fwd avoid-T %s, rev G-or-C %s\n', ...
         onoff(ForwardForce3primeAT), onoff(ForwardAvoid3primeT), onoff(ReverseForce3primeGC));
-    fprintf('      3'' end stability   stage-6 gate %s at %.2f kcal/mol;  Rychlik cap %s at %.1f\n', ...
-        onoff(UseEndStabilityGate), dG3min, onoff(Rychlik.On), Rychlik.Max);
+    if strcmp(EndStabilityScale, 'Rychlik')
+        fprintf('      3'' end stability   stage-8 gate %s at %.2f kcal/mol on the Rychlik 1995 scale (last %d nt, Breslauer 25 C);  Rychlik cap %s at %.1f\n', ...
+            onoff(UseEndStabilityGate), dG3minRychlik, EndWin, onoff(Rychlik.On), Rychlik.Max);
+    else
+        fprintf('      3'' end stability   stage-8 gate %s at %.2f kcal/mol on the SantaLucia scale;  Rychlik cap %s at %.1f\n', ...
+            onoff(UseEndStabilityGate), dG3min, onoff(Rychlik.On), Rychlik.Max);
+    end
+    if isfinite(DimerTmConc), dimConcTxt = sprintf('%.3g M', DimerTmConc); else, dimConcTxt = 'working concentration'; end
+    fprintf('      Homo and 3'' self-dimer   rule %s, Tm <= %.1f C at %s;  hetero and 3'' cross-dimer keep the dG rule\n', ...
+        DimerRule, DimerTmMax, dimConcTxt);
     % The Rychlik cap does not move with the enzyme, so the class is printed beside it where a
     % reader is most likely to wonder whether it should have.
     fprintf('      Enzyme             3''->5'' exonuclease %s;  extension weighting %s\n', ...
@@ -602,8 +645,10 @@ if Verbose
     fprintf('      Efficiency table   %s;  3''-base spread %.3f decades, Wt3Base %.3f\n', ...
         effTxt, cfg.Base3Spread, Wt3Base);
     fprintf('      Hairpin            dG %.2f kcal/mol, blocking margin %.1f C\n', dGhpmin, HpTmMargin);
-    fprintf('      Amplicon collapse  %s (log only), window %d nt, stem run >= %d nt\n', ...
-        onoff(CollapseLog), CollapseWindow, CollapseMinRun);
+    fprintf('      Amplicon collapse  %s, REJECT gate %s, window %d nt, stem run >= %d nt\n', ...
+        onoff(CollapseLog), onoff(CollapseLog&&CollapseGate), CollapseWindow, CollapseMinRun);
+    fprintf('      Collapse Score     tolerance %.1e, FLAG adds %.1f decades, cap %.1f decades, WtCollapse %.3f\n', ...
+        CollapseTol, CollapseFlagDecades, CollapseCap, WtCollapse);
     if isfinite(CollapseExoBlend), blendTxt = sprintf('%.2f', CollapseExoBlend); else, blendTxt = 'not set'; end
     fprintf('      Collapse channels  bimolecular %s, Exo flap <= %d nt, exonuclease blend %s\n', ...
         onoff(CollapseBimolecular), min(CollapseExoEndTol, CollapseWindow - CollapseMinRun), blendTxt);
@@ -649,11 +694,11 @@ AssertRunGatesSatisfiable(RunMap, NonUniq, input, PlasLen, fFlex, rFlex, fLmin, 
 % MispTemp returns this number when it is a real temperature and falls back to tm - dTsub when
 % AnnealLow cannot resolve one, so a run with no usable programme behaves as it did before.
 TAnneal = AnnealLow(input);
-% The collapse screen is judged at the annealing temperature, so it needs a resolved one. It is
-% log-only, so without one it switches off and the search carries on.
+% The collapse screen is judged at the annealing temperature, so it needs a resolved one. Without
+% one the stage switches off, gate and Score term together, and the search carries on.
 if CollapseLog&&~isfinite(TAnneal)
     warning('LocalPrimerSearchEngine:NoCollapseTemperature', ...
-        'No annealing temperature could be resolved; the amplicon collapse log is switched off.');
+        'No annealing temperature could be resolved; the amplicon collapse stage (gate and Score term) is switched off.');
     CollapseLog = false;
 end
 
@@ -730,7 +775,22 @@ AccTK = MispTemp(TAnneal, Tmin, dTsub) + 273.15;
 % than in PrimerSearchParameters because AnnealLow needs the input struct and runs on this side.
 Parameters(end+1, :) = {"Thermal programme (resolved)", "TAnneal", ...
     string(sprintf('%.4g', TAnneal)), "C", ...
-    "Lowest annealing temperature the programme reaches. Resolved from input.AnnealingTemperature, which may be a temperature, a mode flag or a touchdown recipe"};
+    "Lowest annealing temperature the programme reaches. Resolved from input.AnnealingTemperature, which may be a temperature, a mode flag or a touchdown recipe", ...
+    "Derived (lowest annealing temperature of the programme)"};
+
+%% ---- USER-CHOICE SETTINGS ON THE CONSOLE -------------------------------------------------------
+% Every setting whose Source column begins with "User choice" has no literature basis. They are
+% printed to the error stream so that MATLAB shows them in red, and tagged [USER CHOICE] so the
+% tag survives a log file or a monochrome console.
+if Verbose
+    isUser = startsWith(string(Parameters.Source), "User choice");
+    fprintf(2, '[3b/8] %d of %d settings are user choices with no literature basis (Source column of the Parameters sheet)\n', nnz(isUser), height(Parameters));
+    uIdx = find(isUser);
+    for q = 1:numel(uIdx)
+        fprintf(2, '      [USER CHOICE] %-28s %-26s = %s %s\n', char(Parameters.Section(uIdx(q))), char(Parameters.Parameter(uIdx(q))), ...
+            char(Parameters.Value(uIdx(q))), char(Parameters.Units(uIdx(q))));
+    end
+end
 
 %% ---- OUTPUT CONTAINERS -------------------------------------------------------------------------
 % All three logs exist from the outset, so an empty search does not leave results.Reverse_Log
@@ -764,10 +824,10 @@ for i = (input.ScaffoldStart - fFlex):(input.ScaffoldStart)
             'fGC', NaN,'dflocgc35', NaN, 'fnumocc', NaN, 'fdirep', NaN, ...
             'fKmer3', "", 'fKmerN', NaN, ...
             'fRun3', NaN, 'fRunInt', NaN, 'fRunIntOff', NaN, 'fRunIntSeq', "", ...
-            'dGf3end', NaN, ...
+            'dGf3end', NaN, 'dGf3endRyc', NaN, ...
             'dGf3stack', NaN, 'dGf5stack', NaN, 'fProf', NaN, ...
             'pfOpen', NaN, 'dGfOpen', NaN, 'fTm', NaN,...
-            'dGf', NaN, 'dGffmin', NaN, 'fAlignf', "" , 'dGff', NaN, 'dGffend', NaN, 'ffTm', NaN, ...
+            'dGf', NaN, 'dGffmin', NaN, 'fAlignf', "" , 'dGff', NaN, 'dGffend', NaN, 'ffTm', NaN, 'ffTmEnd', NaN, ...
             'fstemalign', "", 'dGfhp', NaN, 'fhpTm', NaN, 'flockTm', NaN, 'ffold', NaN, ...
             'fBase3', "", 'fEps3', NaN, ...
             'dGfTcmin', NaN, 'dGfTc', NaN, 'dGfTmin', NaN, 'dGfT', NaN, ...
@@ -845,10 +905,13 @@ for i = (input.ScaffoldStart - fFlex):(input.ScaffoldStart)
                             % Logged and scored always; gated only when UseEndStabilityGate is on.
                             [dGf3end, dGf3stack, dGf5stack, fProf] = EndStability(primj, EndWin);
                             record.dGf3end = dGf3end;
+                            dGf3endRyc = RychlikEndStability(primj, EndWin);
+                            record.dGf3endRyc = dGf3endRyc;
                             record.dGf3stack = dGf3stack;
                             record.dGf5stack = dGf5stack;
                             record.fProf = fProf;
-                            if (~UseEndStabilityGate)||(dGf3end >= dG3min)
+                            if strcmp(EndStabilityScale, 'Rychlik'), f3ok = (dGf3endRyc >= (dG3minRychlik - 1E-9)); else, f3ok = (dGf3end >= dG3min); end
+                            if (~UseEndStabilityGate)||f3ok
                                 record.RejectStage = "Site_Accessibility";
                                 % --- 9. accessibility of the MINUS strand site ---
                                 % The forward primer is identical to the plus strand, so it binds the
@@ -870,12 +933,13 @@ for i = (input.ScaffoldStart - fFlex):(input.ScaffoldStart)
                                             input.PlasmidConcentration, input.MonovalentCationConcentration, ...
                                             input.BivalentCationConcentration, input.dNTPsConcentration, tmf, dTsub, TAnneal, DimerTemplateBeyond);
                                         record.dGf = dGf; record.dGffmin = dGffmin; record.fAlignf = AlignRow(fAlignf); record.dGff = dGff;
-                                        record.ffTm = DimerMeltTm(primj, primj, ...
-                                            input.ForwardPrimerConcentration, [], ...
+                                        % Dimer Tm at DimerTmConc when finite, else at the primer's working concentration.
+                                        if isfinite(DimerTmConc), cDimF = DimerTmConc; else, cDimF = input.ForwardPrimerConcentration; end
+                                        record.ffTm = DimerMeltTm(primj, primj, cDimF, [], ...
                                             input.MonovalentCationConcentration, ...
                                             input.BivalentCationConcentration, ...
                                             input.dNTPsConcentration, MispTemp(TAnneal, tmf, dTsub));
-                                        if check == true
+                                        if DimerTmVerdict(DimerRule, record.ffTm, dGff, DimerTmMax, (check == true))
                                             record.RejectStage = "Three_Prime_Self_Dimer";
                                             % --- 12. 3'-anchored self-dimer ---
                                             % dGffend is the sixth output of HomodimerizerMismatch: the minimum over
@@ -887,8 +951,16 @@ for i = (input.ScaffoldStart - fFlex):(input.ScaffoldStart)
                                             % unpaired 3' tail and makes an internal register
                                             % extendable. Both quantities stay in the log, so the
                                             % run is reconstructable either way.
-                                            if ProofExo, ffGate = dGff; else, ffGate = dGffend; end
-                                            if ffGate >= dGEndMin
+                                            record.ffTmEnd = DimerMeltTm(primj, primj, cDimF, [], ...
+                                                input.MonovalentCationConcentration, ...
+                                                input.BivalentCationConcentration, ...
+                                                input.dNTPsConcentration, MispTemp(TAnneal, tmf, dTsub), [], 'end', DimerTemplateBeyond);
+                                            if ProofExo
+                                                ffGate = dGff; ffTmGate = record.ffTm; ffReg = dGff;
+                                            else
+                                                ffGate = dGffend; ffTmGate = record.ffTmEnd; ffReg = dGffend;
+                                            end
+                                            if DimerTmVerdict(DimerRule, ffTmGate, ffReg, DimerTmMax, (ffGate >= dGEndMin))
                                                 record.RejectStage = "Hairpin";
                                                 % --- 13. hairpin, judged on melting temperature ---
                                                 [fstemalign, check, fdGhp, fhpTm, flockTm, ffold] = ...
@@ -1017,10 +1089,10 @@ if ~isempty(ForwardCandidate)
                 'rGC', NaN, 'drlocgc35', NaN, 'rnumocc', NaN, 'rdirep', NaN, ...
                 'rKmer3', "", 'rKmerN', NaN, ...
                 'rRun3', NaN, 'rRunInt', NaN, 'rRunIntOff', NaN, 'rRunIntSeq', "", ...
-                'dGr3end', NaN, ...
+                'dGr3end', NaN, 'dGr3endRyc', NaN, ...
                 'dGr3stack', NaN, 'dGr5stack', NaN, 'rProf', NaN, ...
                 'prOpen', NaN, 'dGrOpen', NaN, 'rTm', NaN, ...
-                'dGr', NaN, 'dGrrmin', NaN, 'rAlignr', "" , 'dGrr', NaN, 'dGrrend', NaN, 'rrTm', NaN, ...
+                'dGr', NaN, 'dGrrmin', NaN, 'rAlignr', "" , 'dGrr', NaN, 'dGrrend', NaN, 'rrTm', NaN, 'rrTmEnd', NaN, ...
                 'rstemalign', "", 'dGrhp', NaN, 'rhpTm', NaN, 'rlockTm', NaN, 'rfold', NaN, ...
                 'rBase3', "", 'rEps3', NaN, ...
                 'dGrTcmin', NaN, 'dGrTc', NaN, 'dGrTmin', NaN, 'dGrT', NaN, ...
@@ -1092,10 +1164,13 @@ if ~isempty(ForwardCandidate)
                                 % Logged and scored always; gated only when UseEndStabilityGate is on.
                                 [dGr3end, dGr3stack, dGr5stack, rProf] = EndStability(priml, EndWin);
                                 record.dGr3end = dGr3end;
+                                dGr3endRyc = RychlikEndStability(priml, EndWin);
+                                record.dGr3endRyc = dGr3endRyc;
                                 record.dGr3stack = dGr3stack;
                                 record.dGr5stack = dGr5stack;
                                 record.rProf = rProf;
-                                if (~UseEndStabilityGate)||(dGr3end >= dG3min)
+                                if strcmp(EndStabilityScale, 'Rychlik'), r3ok = (dGr3endRyc >= (dG3minRychlik - 1E-9)); else, r3ok = (dGr3end >= dG3min); end
+                                if (~UseEndStabilityGate)||r3ok
                                     record.RejectStage = "Site_Accessibility";
                                     % --- 9. accessibility of the PLUS strand site ---
                                     % The reverse primer binds the plus strand over [rPos-l+1, rPos],
@@ -1115,18 +1190,26 @@ if ~isempty(ForwardCandidate)
                                                 input.PlasmidConcentration, input.MonovalentCationConcentration, ...
                                                 input.BivalentCationConcentration, input.dNTPsConcentration, tmr, dTsub, TAnneal, DimerTemplateBeyond);
                                             record.dGr = dGr; record.dGrrmin = dGrrmin; record.rAlignr = AlignRow(rAlignr); record.dGrr = dGrr;
-                                            record.rrTm = DimerMeltTm(priml, priml, ...
-                                                input.ReversePrimerConcentration, [], ...
+                                            if isfinite(DimerTmConc), cDimR = DimerTmConc; else, cDimR = input.ReversePrimerConcentration; end
+                                            record.rrTm = DimerMeltTm(priml, priml, cDimR, [], ...
                                                 input.MonovalentCationConcentration, ...
                                                 input.BivalentCationConcentration, ...
                                                 input.dNTPsConcentration, MispTemp(TAnneal, tmr, dTsub));
-                                            if check == true
+                                            if DimerTmVerdict(DimerRule, record.rrTm, dGrr, DimerTmMax, (check == true))
                                                 record.RejectStage = "Three_Prime_Self_Dimer";
                                                 % --- 12. 3'-anchored self-dimer ---
                                                 % Sixth output of HomodimerizerMismatch, from DimerScan.
                                                 record.dGrrend = dGrrend;
-                                                if ProofExo, rrGate = dGrr; else, rrGate = dGrrend; end
-                                                if rrGate >= dGEndMin
+                                                record.rrTmEnd = DimerMeltTm(priml, priml, cDimR, [], ...
+                                                    input.MonovalentCationConcentration, ...
+                                                    input.BivalentCationConcentration, ...
+                                                    input.dNTPsConcentration, MispTemp(TAnneal, tmr, dTsub), [], 'end', DimerTemplateBeyond);
+                                                if ProofExo
+                                                    rrGate = dGrr; rrTmGate = record.rrTm; rrReg = dGrr;
+                                                else
+                                                    rrGate = dGrrend; rrTmGate = record.rrTmEnd; rrReg = dGrrend;
+                                                end
+                                                if DimerTmVerdict(DimerRule, rrTmGate, rrReg, DimerTmMax, (rrGate >= dGEndMin))
                                                     record.RejectStage = "Hairpin";
                                                     % --- 13. hairpin, judged on melting temperature ---
                                                     [rstemalign, check, rdGhp, rhpTm, rlockTm, rfold] = ...
@@ -1246,13 +1329,13 @@ if ~isempty(ForwardCandidate)
                     'fKmer3', ForwardData.fKmer3, 'fKmerN', ForwardData.fKmerN, ...
                     'fRun3', ForwardData.fRun3, 'fRunInt', ForwardData.fRunInt, ...
                     'fRunIntOff', ForwardData.fRunIntOff, 'fRunIntSeq', ForwardData.fRunIntSeq, ...
-                    'dGf3end', ForwardData.dGf3end, ...
+                    'dGf3end', ForwardData.dGf3end, 'dGf3endRyc', ForwardData.dGf3endRyc, ...
                     'dGf3stack', ForwardData.dGf3stack, 'dGf5stack', ForwardData.dGf5stack, ...
                     'fProf', ForwardData.fProf, ...
                     'pfOpen', ForwardData.pfOpen, 'dGfOpen', ForwardData.dGfOpen, ...
                     'fTm', ForwardData.fTm, ...
                     'dGf', ForwardData.dGf, 'dGffmin', ForwardData.dGffmin, 'fAlignf', ForwardData.fAlignf, ...
-                    'dGff', ForwardData.dGff, 'dGffend', ForwardData.dGffend, 'ffTm', ForwardData.ffTm, ...
+                    'dGff', ForwardData.dGff, 'dGffend', ForwardData.dGffend, 'ffTm', ForwardData.ffTm, 'ffTmEnd', ForwardData.ffTmEnd, ...
                     'fstemalign', ForwardData.fstemalign, ...
                     'dGfhp', ForwardData.dGfhp, 'fhpTm', ForwardData.fhpTm, ...
                     'flockTm', ForwardData.flockTm, 'ffold', ForwardData.ffold, ...
@@ -1277,13 +1360,13 @@ if ~isempty(ForwardCandidate)
                     'rKmer3', ReverseData.rKmer3, 'rKmerN', ReverseData.rKmerN, ...
                     'rRun3', ReverseData.rRun3, 'rRunInt', ReverseData.rRunInt, ...
                     'rRunIntOff', ReverseData.rRunIntOff, 'rRunIntSeq', ReverseData.rRunIntSeq, ...
-                    'dGr3end', ReverseData.dGr3end, ...
+                    'dGr3end', ReverseData.dGr3end, 'dGr3endRyc', ReverseData.dGr3endRyc, ...
                     'dGr3stack', ReverseData.dGr3stack, 'dGr5stack', ReverseData.dGr5stack, ...
                     'rProf', ReverseData.rProf, ...
                     'prOpen', ReverseData.prOpen, 'dGrOpen', ReverseData.dGrOpen, ...
                     'rTm', ReverseData.rTm, 'dTmrf', NaN, ...
                     'dGr', ReverseData.dGr, 'dGrrmin', ReverseData.dGrrmin, 'rAlignr', ReverseData.rAlignr, ...
-                    'dGrr', ReverseData.dGrr, 'dGrrend', ReverseData.dGrrend, 'rrTm', ReverseData.rrTm, ...
+                    'dGrr', ReverseData.dGrr, 'dGrrend', ReverseData.dGrrend, 'rrTm', ReverseData.rrTm, 'rrTmEnd', ReverseData.rrTmEnd, ...
                     'rstemalign', ReverseData.rstemalign, ...
                     'dGrhp', ReverseData.dGrhp, 'rhpTm', ReverseData.rhpTm, ...
                     'rlockTm', ReverseData.rlockTm, 'rfold', ReverseData.rfold, ...
@@ -1311,16 +1394,19 @@ if ~isempty(ForwardCandidate)
                     ... % TmARelYield is the implied fraction of that best slope;
                     ... % TmAExtrap marks a gap beyond the widest Pierce tested.
                     'TmAPenalty', NaN, 'TmARelYield', NaN, 'TmAExtrap', false, ...
-                    ... % Amplicon 3'-OH collapse, log only (stage P5). cp* is the plus strand, whose
+                    ... % Amplicon 3'-OH collapse (stage P5). cp* is the plus strand, whose
                     ... % 3'-OH sits at rPos. cm* is the minus strand, whose 3'-OH sits at fPos.
                     'cpTier', "NA", 'cpDGfold', NaN, 'cpDGfoldEng', NaN, 'cpTm', NaN, 'cpTmEng', NaN, ...
                     'cpLoop', NaN, 'cpEps', NaN, 'cpPExt', NaN, 'cpPExtEng', NaN, 'cpJoverC', NaN, 'cpSites', NaN, ...
                     'cpTierAll', "NA", 'cpPExtTot', NaN, 'cpBiShare', NaN, 'cpPExtTaq', NaN, 'cpPExtExo', NaN, ...
-                    'cpPExtBlend', NaN, 'cpTmBi', NaN, ...
+                    'cpPExtBlend', NaN, 'cpTmBi', NaN, 'cpTierDecl', "NA", ...
                     'cmTier', "NA", 'cmDGfold', NaN, 'cmDGfoldEng', NaN, 'cmTm', NaN, 'cmTmEng', NaN, ...
                     'cmLoop', NaN, 'cmEps', NaN, 'cmPExt', NaN, 'cmPExtEng', NaN, 'cmJoverC', NaN, 'cmSites', NaN, ...
                     'cmTierAll', "NA", 'cmPExtTot', NaN, 'cmBiShare', NaN, 'cmPExtTaq', NaN, 'cmPExtExo', NaN, ...
-                    'cmPExtBlend', NaN, 'cmTmBi', NaN, ...
+                    'cmPExtBlend', NaN, 'cmTmBi', NaN, 'cmTierDecl', "NA", ...
+                    'CollapseDecades', NaN, ...
+                    'tDelta', NaN, 'tTmA', NaN, 'tMargin', NaN, 'tMisp', NaN, 'tEns', NaN, 'tCollapse', NaN, ...
+                    'tAccess', NaN, 't3End', NaN, 'tProf', NaN, 'tFlank', NaN, 'tHairpin', NaN, 't3Base', NaN, ...
                     'Score', NaN, ...
                     'RejectStage', "Tm_Offset", 'Status', "Eliminated");
                 % Amplicon geometry on the circular frame: forward 5' terminus to reverse 5' terminus.
@@ -1425,7 +1511,23 @@ if ~isempty(ForwardCandidate)
                         dGfrend = min(dGfrendF, dGfrendR);
                         record.dGfrend = dGfrend;
                         if ProofExo, frGate = dGfr; else, frGate = dGfrend; end
-                        if frGate >= dGEndMin
+                        % ---- P5. amplicon 3'-OH collapse gate ----
+                        % Runs only for a pair that has cleared every earlier stage, so each reject is
+                        % charged to this stage alone. A reject-tier state in the declared enzyme channel on either
+                        % strand removes the pair. Every other tier is priced in Score below.
+                        collapseHold = false;
+                        if CollapseLog&&(frGate >= dGEndMin)
+                            cres = CollapseForPair(ForwardData.fPos, ReverseData.rPos, PlasDbl, PlasLen, ...
+                                input, fFlex, rFlex, CollapseWindow, CollapseMinRun, TAnneal, ...
+                                UseExtensionEfficiency, CollapseOptsPlus, CollapseOptsMinus, CollapseCachePlus, CollapseCacheMinus);
+                            record = CollapseToRecord(record, 'cp', cres.plus);
+                            record = CollapseToRecord(record, 'cm', cres.minus);
+                            if CollapseGate&&((cres.plus.tierDeclRank >= 3)||(cres.minus.tierDeclRank >= 3))
+                                collapseHold = true;
+                                record.RejectStage = "Amplicon_Collapse";
+                            end
+                        end
+                        if (frGate >= dGEndMin)&&~collapseHold
                             record.RejectStage = "";
                             record.Status = "Selected";
                             % ---- ranking ----
@@ -1527,25 +1629,35 @@ if ~isempty(ForwardCandidate)
                             foldworst = max([record.ffold, record.rfold, 0]);
                             % 3'-terminal base. Larger is better discrimination, hence the minus.
                             base3worst = min([record.fEps3, record.rEps3]);
-                            record.Score = abs(dTmrf - 0.5*(dTrfmin + dTrfmax)) ...
-                                + WtTmA*tmaTerm ...
-                                - WtMargin*worstmargin ...
-                                - WtMisp*worstmisp ...
-                                + WtEns*ensworst ...
-                                + WtAccess*opencost ...
-                                + Wt3End*end3 ...
-                                - WtProf*profworst ...
-                                + WtFlank*flankTerm ...
-                                + WtHairpin*foldworst ...
-                                - Wt3Base*base3worst;
-                            % Stage P5, log only. Nothing below reads these fields except the output.
+                            % Amplicon collapse, in decades of extendable fraction above CollapseTol.
+                            % pColl is the larger of the two strands in the declared channel. A strand in
+                            % the flag tier adds CollapseFlagDecades, because a persistent fold is extended
+                            % across the whole step and the equilibrium fraction understates it. Transient
+                            % folds enter through pColl alone. Capped before weighting, as every term is.
+                            collapseDec = 0;
                             if CollapseLog
-                                cres = CollapseForPair(ForwardData.fPos, ReverseData.rPos, PlasDbl, PlasLen, ...
-                                    input, fFlex, rFlex, CollapseWindow, CollapseMinRun, TAnneal, ...
-                                    UseExtensionEfficiency, CollapseOptsPlus, CollapseOptsMinus, CollapseCachePlus, CollapseCacheMinus);
-                                record = CollapseToRecord(record, 'cp', cres.plus);
-                                record = CollapseToRecord(record, 'cm', cres.minus);
+                                pColl = max([record.cpPExtTot, record.cmPExtTot]);
+                                isFlag = (cres.plus.tierDeclRank == 2)||(cres.minus.tierDeclRank == 2);
+                                collapseDec = ScaffoldCollapseCheck('penalty', pColl, isFlag, CollapseTol, CollapseFlagDecades, CollapseCap);
                             end
+                            record.CollapseDecades = collapseDec;
+                            % Each term is kept as it enters the Score, so that Score is exactly their sum
+                            % and a weight-sensitivity run can rescale one column without a re-search.
+                            record.tDelta = abs(dTmrf - 0.5*(dTrfmin + dTrfmax));
+                            record.tTmA = WtTmA*tmaTerm;
+                            record.tMargin = -WtMargin*worstmargin;
+                            record.tMisp = -WtMisp*worstmisp;
+                            record.tEns = WtEns*ensworst;
+                            record.tCollapse = WtCollapse*collapseDec;
+                            record.tAccess = WtAccess*opencost;
+                            record.t3End = Wt3End*end3;
+                            record.tProf = -WtProf*profworst;
+                            record.tFlank = WtFlank*flankTerm;
+                            record.tHairpin = WtHairpin*foldworst;
+                            record.t3Base = -Wt3Base*base3worst;
+                            record.Score = record.tDelta + record.tTmA + record.tMargin + record.tMisp + record.tEns ...
+                                + record.tCollapse + record.tAccess + record.t3End + record.tProf + record.tFlank ...
+                                + record.tHairpin + record.t3Base;
                             tabrow = table(ForwardData.fPos, ForwardData.fseq, tmf, ForwardData.flen, ForwardData.fGC, ...
                                 ReverseData.rPos, ReverseData.rseq, tmr, ReverseData.rlen, ReverseData.rGC, ...
                                 dTmrf, record.ampLen, record.flankLen, record.TmA, record.dTmAX, ...
@@ -1562,6 +1674,7 @@ if ~isempty(ForwardCandidate)
                                 record.cpTier, record.cmTier, record.cpPExt, record.cmPExt, ...
                                 record.cpTm, record.cmTm, ...
                                 record.cpTierAll, record.cmTierAll, record.cpPExtTot, record.cmPExtTot, ...
+                                record.CollapseDecades, ...
                                 'VariableNames', {'F_Start', 'F_Primer', 'F_Tm', 'F_Length', 'F_GC', ...
                                 'R_Start', 'R_Primer', 'R_Tm', 'R_Length', 'R_GC', ...
                                 'dTm', 'Amplicon_Length', 'Flank_Length', 'Amplicon_Tm', 'dTm_A_X', ...
@@ -1580,7 +1693,7 @@ if ~isempty(ForwardCandidate)
                                 'Collapse_Plus_pExt', 'Collapse_Minus_pExt', ...
                                 'Collapse_Plus_Tm', 'Collapse_Minus_Tm', ...
                                 'Collapse_Plus_TierAll', 'Collapse_Minus_TierAll', ...
-                                'Collapse_Plus_pExtTot', 'Collapse_Minus_pExtTot'});
+                                'Collapse_Plus_pExtTot', 'Collapse_Minus_pExtTot', 'Collapse_Decades'});
                             tab = [tab; tabrow];
                         end
                     end
@@ -2130,7 +2243,7 @@ end
 end
 
 %% ____________________________________________________________________________________________________________
-%% COLLAPSEFORPAIR  Amplicon 3'-OH collapse of both strands for one primer pair, log only
+%% COLLAPSEFORPAIR  Amplicon 3'-OH collapse of both strands for one primer pair
 % The plus strand runs 5' to 3' from the earliest admissible forward start to rPos, where its 3'-OH
 % sits. The minus strand runs from the latest admissible reverse end down to fPos, read as the
 % reverse complement, and ends in its 3'-OH at fPos. A scan depends on the terminus alone, so it is
@@ -2180,21 +2293,24 @@ record.([pre 'PExtTaq']) = ev.pExtTaq;
 record.([pre 'PExtExo']) = ev.pExtExo;
 record.([pre 'PExtBlend']) = ev.pExtBlend;
 record.([pre 'TmBi']) = ev.tmBi;
+record.([pre 'TierDecl']) = string(ev.tierDecl);
 % An infinite free energy stands for no fold found, and the log shows it as empty
 if ~isfinite(record.([pre 'DGfold'])), record.([pre 'DGfold']) = NaN; end
 if ~isfinite(record.([pre 'DGfoldEng'])), record.([pre 'DGfoldEng']) = NaN; end
 end
 
 %% ____________________________________________________________________________________________________________
-%% REPORTCOLLAPSE  Tier tally of the accepted pairs, per strand. Log only
+%% REPORTCOLLAPSE  Tier tally of the pairs that reached stage P5, per strand
 function ReportCollapse(logtab, isOn)
 if ~isOn||isempty(logtab)||~ismember('cpTier', logtab.Properties.VariableNames), return; end
-keep = strcmp(cellstr(string(logtab.Status)), 'Selected');
+% Every pair that reached stage P5 carries a tier, whether it was then kept or removed
+keep = ~strcmp(cellstr(string(logtab.cpTier)), 'NA');
 if ~any(keep), return; end
+nGate = nnz(strcmp(cellstr(string(logtab.RejectStage)), 'Amplicon_Collapse')&strcmp(cellstr(string(logtab.Status)), 'Eliminated'));
 tiers = {'REJECT', 'FLAG', 'TRANSIENT', 'NONE'};
 prefixes = {'cp', 'cm'};
 names = {'plus', 'minus'};
-fprintf('      Amplicon 3''-OH collapse of %d accepted pairs (log only, nothing rejected)\n', nnz(keep));
+fprintf('      Amplicon 3''-OH collapse of %d pairs that reached stage P5, %d removed by the REJECT gate\n', nnz(keep), nGate);
 for q = 1:2
     col = cellstr(string(logtab.([prefixes{q} 'Tier'])(keep)));
     fprintf('        %-5s strand, foldback in the declared channel:', names{q});
@@ -2212,7 +2328,9 @@ for q = 1:2
     end
 end
 fprintf(['      REJECT means a fold with its 3'' end paired persists at the annealing temperature less\n' ...
-         '      HpTmMargin. Read cpTm, cpPExt and cpJoverC in Pair_Log before turning any of it into a gate.\n']);
+         '      HpTmMargin. The gate acts on the declared enzyme channel; the first line per strand shows the\n' ...
+         '      foldback tier and the second the worst tier over both channels. Collapse_Decades in\n' ...
+         '      Candidate_Primers is the Score input of the surviving pairs.\n']);
 end
 
 %% ____________________________________________________________________________________________________________

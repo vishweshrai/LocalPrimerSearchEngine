@@ -1,7 +1,7 @@
 function out = ScaffoldCollapseCheck(mode, varargin)
 %% Amplicon 3'-OH Foldback and Self-Priming Screen
 % Written for the aPCR suite, Laboratory of Nanobiology, IISc Bangalore, INDIA
-% 12-11-2026 02:16 IST
+% 12-11-2026 19:53 IST
 % ____________________________________________________________________________________________________________
 % Physics
 %
@@ -53,7 +53,7 @@ function out = ScaffoldCollapseCheck(mode, varargin)
 % so the measured table is kept where it applies. The engine form, dG_table(30) + 2.44*R*T37*ln(n/30)
 % from dGLoop, is carried beside it in dGfoldEng, tmEng and pExtEng for comparison and drives nothing.
 % ____________________________________________________________________________________________________________
-% Persistence and Tiers (log-only)
+% Persistence and Tiers
 %
 % A hairpin is unimolecular, so its melting temperature has no concentration dependence. tmFold comes
 % from dGfold at tann and tann + 10 degrees C (two-point van't Hoff). A fold persists when
@@ -124,6 +124,7 @@ function out = ScaffoldCollapseCheck(mode, varargin)
 % Usage
 %   scanRes = ScaffoldCollapseCheck('scan', maxScaffSeq, tailWin, minRun, endTol, monv, biv, dNTP, tann, useEps, opts)
 %   evalRes = ScaffoldCollapseCheck('eval', scanRes, minR0, dGCollapseMax)
+%   dec = ScaffoldCollapseCheck('penalty', pColl, isFlag, tol, flagDecades, capDecades)
 %
 %   maxScaffSeq  the longest admissible strand, 5' to 3', whose 3' end carries the OH
 %   tailWin      length of the 3'-terminal window searched for stems, nt
@@ -140,11 +141,12 @@ function out = ScaffoldCollapseCheck(mode, varargin)
 %   dGCollapseMax  folds with dGeff at or below this value fail, kcal/mol
 %
 % Output (eval) dGfoldMin, dGeffMin, dGensEff, pFold, pExt, loopLen, targetOffset, eps, epsPair,
-%   align, nSites, pass, plus the log-only fields dGfoldEng, tmFold, tmEng, jOverC, pExtEng, tier,
+%   align, nSites, pass, plus the fields dGfoldEng, tmFold, tmEng, jOverC, pExtEng, tier,
 %   tierRank (0 none, 1 transient, 2 flag, 3 reject), pExtTot (foldback plus bimolecular, declared
 %   channel), biShare (bimolecular share of pExtTot), pExtTaq, pExtExo, pExtBlend, tmBi (melting
-%   temperature of the strongest bimolecular stem) and tierAll, tierAllRank (worst tier over both
-%   channels and both topologies)
+%   temperature of the strongest bimolecular stem), tierAll, tierAllRank (worst tier over both
+%   channels and both topologies) and tierDecl, tierDeclRank (worst tier in the declared channel alone,
+%   over foldback and bimolecular states, which is the tier the engine gates on)
 % ____________________________________________________________________________________________________________
 % References
 %   SantaLucia J Jr, Hicks D. The thermodynamics of DNA structural motifs. Annu Rev Biophys Biomol
@@ -167,9 +169,19 @@ switch lower(char(mode))
         out = ScanMaxScaffold(varargin{:});
     case 'eval'
         out = EvalAmpliconSpan(varargin{:});
+    case 'penalty'
+        out = CollapsePenalty(varargin{:});
     otherwise
-        error('ScaffoldCollapseCheck:BadMode', 'Unknown mode "%s". Use ''scan'' or ''eval''.', char(mode));
+        error('ScaffoldCollapseCheck:BadMode', 'Unknown mode "%s". Use ''scan'', ''eval'' or ''penalty''.', char(mode));
 end
+end
+
+%% Collapse Penalty
+function dec = CollapsePenalty(pColl, isFlag, tol, flagDecades, capDecades)
+% Decades by which the extendable fraction exceeds the tolerance, plus one increment for a flag-tier
+% strand, floored at zero and capped. The engine multiplies the result by WtCollapse.
+dec = log10(max(pColl, realmin)/tol) + flagDecades*(isFlag > 0);
+dec = min(max(dec, 0), capDecades);
 end
 
 %% Scan Maximum Scaffold
@@ -363,7 +375,7 @@ evalRes = struct('dGfoldMin', Inf, 'dGeffMin', Inf, 'dGensEff', Inf, ...
     'dGfoldEng', Inf, 'tmFold', NaN, 'tmEng', NaN, 'jOverC', NaN, ...
     'pExtEng', 0, 'tier', "NONE", 'tierRank', 0, ...
     'pExtTot', 0, 'biShare', 0, 'pExtTaq', 0, 'pExtExo', 0, 'pExtBlend', NaN, ...
-    'tmBi', NaN, 'tierAll', "NONE", 'tierAllRank', 0);
+    'tmBi', NaN, 'tierAll', "NONE", 'tierAllRank', 0, 'tierDecl', "NONE", 'tierDeclRank', 0);
 
 if isempty(scanRes.sites)
     return;
@@ -463,6 +475,17 @@ for q = 1:numel(allSites)
 end
 evalRes.tierAllRank = rk;
 evalRes.tierAll = string(tierNames{rk + 1});
+
+% Worst tier in the declared enzyme channel alone: the tier the engine gates and prices on
+rd = 0;
+for q = 1:numel(allSites)
+    rd = max(rd, TierRank(epsDecl(q), allSites(q).tmFold, scanRes.tann, opts));
+    if opts.Bimolecular
+        rd = max(rd, TierRank(epsDecl(q), allSites(q).tmBi, scanRes.tann, opts));
+    end
+end
+evalRes.tierDeclRank = rd;
+evalRes.tierDecl = string(tierNames{rd + 1});
 end
 
 %% Max Contiguous Run
